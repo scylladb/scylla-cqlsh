@@ -23,7 +23,7 @@ import unittest
 cqlshlog = logging.getLogger('test_cqlsh')
 
 test_dir = dirname(__file__)
-cassandra_dir = normpath(join(test_dir, '..', '..', '..'))
+cassandra_dir = normpath(join(test_dir, '..', '..'))
 cqlsh_dir = join(cassandra_dir, 'bin')
 path_to_cqlsh = join(cqlsh_dir, 'cqlsh.py')
 

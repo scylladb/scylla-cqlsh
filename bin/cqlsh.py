@@ -1253,13 +1253,206 @@ class Shell(cmd.Cmd):
         if valstr is not None:
             return cqlruleset.dequote_value(valstr)
 
-    def _columnize_unicode(self, name_list):
+    def print_recreate_keyspace(self, ksdef, out):
+        out.write(ksdef.export_as_string())
+        out.write("\n")
+
+    def print_recreate_columnfamily(self, ksname, cfname, out):
+        """
+        Output CQL commands which should be pasteable back into a CQL session
+        to recreate the given table.
+
+        Writes output to the given out stream.
+        """
+        out.write(self.get_table_meta(ksname, cfname).export_as_string())
+        out.write("\n")
+
+    def print_recreate_index(self, ksname, idxname, out):
+        """
+        Output CQL commands which should be pasteable back into a CQL session
+        to recreate the given index.
+
+        Writes output to the given out stream.
+        """
+        out.write(self.get_index_meta(ksname, idxname).export_as_string())
+        out.write("\n")
+
+    def print_recreate_materialized_view(self, ksname, viewname, out):
+        """
+        Output CQL commands which should be pasteable back into a CQL session
+        to recreate the given materialized view.
+
+        Writes output to the given out stream.
+        """
+        out.write(self.get_view_meta(ksname, viewname).export_as_string())
+        out.write("\n")
+
+    def print_recreate_object(self, ks, name, out):
+        """
+        Output CQL commands which should be pasteable back into a CQL session
+        to recreate the given object (ks, table or index).
+
+        Writes output to the given out stream.
+        """
+        out.write(self.get_object_meta(ks, name).export_as_string())
+        out.write("\n")
+
+    def describe_keyspaces_client(self):
+        print('')
+        cmd.Cmd.columnize(self, protect_names(self.get_keyspace_names()))
+        print('')
+
+    def describe_keyspace_client(self, ksname):
+        print('')
+        self.print_recreate_keyspace(self.get_keyspace_meta(ksname), sys.stdout)
+        print('')
+
+    def describe_columnfamily_client(self, ksname, cfname):
+        if ksname is None:
+            ksname = self.current_keyspace
+        if ksname is None:
+            raise NoKeyspaceError("No keyspace specified and no current keyspace")
+        print('')
+        self.print_recreate_columnfamily(ksname, cfname, sys.stdout)
+        print('')
+
+    def describe_index_client(self, ksname, idxname):
+        print('')
+        self.print_recreate_index(ksname, idxname, sys.stdout)
+        print('')
+
+    def describe_materialized_view_client(self, ksname, viewname):
+        if ksname is None:
+            ksname = self.current_keyspace
+        if ksname is None:
+            raise NoKeyspaceError("No keyspace specified and no current keyspace")
+        print('')
+        self.print_recreate_materialized_view(ksname, viewname, sys.stdout)
+        print('')
+
+    def describe_object_client(self, ks, name):
+        print('')
+        self.print_recreate_object(ks, name, sys.stdout)
+        print('')
+
+    def describe_columnfamilies_client(self, ksname):
+        print('')
+        if ksname is None:
+            for k in self.get_keyspaces():
+                name = protect_name(k.name)
+                print('Keyspace %s' % (name,))
+                print('---------%s' % ('-' * len(name)))
+                cmd.Cmd.columnize(self, protect_names(self.get_columnfamily_names(k.name)))
+                print('')
+        else:
+            cmd.Cmd.columnize(self, protect_names(self.get_columnfamily_names(ksname)))
+            print('')
+
+    def describe_functions_client(self, ksname):
+        print('')
+        if ksname is None:
+            for ksmeta in self.get_keyspaces():
+                name = protect_name(ksmeta.name)
+                print('Keyspace %s' % (name,))
+                print('---------%s' % ('-' * len(name)))
+                self._columnize_unicode(list(ksmeta.functions.keys()))
+        else:
+            ksmeta = self.get_keyspace_meta(ksname)
+            self._columnize_unicode(list(ksmeta.functions.keys()))
+
+    def describe_function_client(self, ksname, functionname):
+        if ksname is None:
+            ksname = self.current_keyspace
+        if ksname is None:
+            raise NoKeyspaceError("No keyspace specified and no current keyspace")
+        print('')
+        ksmeta = self.get_keyspace_meta(ksname)
+        functions = [f for f in list(ksmeta.functions.values()) if f.name == functionname]
+        if len(functions) == 0:
+            raise FunctionNotFound("User defined function {} not found".format(functionname))
+        print("\n\n".join(func.export_as_string() for func in functions))
+        print('')
+
+    def describe_aggregates_client(self, ksname):
+        print('')
+        if ksname is None:
+            for ksmeta in self.get_keyspaces():
+                name = protect_name(ksmeta.name)
+                print('Keyspace %s' % (name,))
+                print('---------%s' % ('-' * len(name)))
+                self._columnize_unicode(list(ksmeta.aggregates.keys()))
+        else:
+            ksmeta = self.get_keyspace_meta(ksname)
+            self._columnize_unicode(list(ksmeta.aggregates.keys()))
+
+    def describe_aggregate_client(self, ksname, aggregatename):
+        if ksname is None:
+            ksname = self.current_keyspace
+        if ksname is None:
+            raise NoKeyspaceError("No keyspace specified and no current keyspace")
+        print('')
+        ksmeta = self.get_keyspace_meta(ksname)
+        aggregates = [f for f in list(ksmeta.aggregates.values()) if f.name == aggregatename]
+        if len(aggregates) == 0:
+            raise FunctionNotFound("User defined aggregate {} not found".format(aggregatename))
+        print("\n\n".join(aggr.export_as_string() for aggr in aggregates))
+        print('')
+
+    def describe_usertypes_client(self, ksname):
+        print('')
+        if ksname is None:
+            for ksmeta in self.get_keyspaces():
+                name = protect_name(ksmeta.name)
+                print('Keyspace %s' % (name,))
+                print('---------%s' % ('-' * len(name)))
+                self._columnize_unicode(list(ksmeta.user_types.keys()), quote=True)
+        else:
+            ksmeta = self.get_keyspace_meta(ksname)
+            self._columnize_unicode(list(ksmeta.user_types.keys()), quote=True)
+
+    def describe_usertype_client(self, ksname, typename):
+        if ksname is None:
+            ksname = self.current_keyspace
+        if ksname is None:
+            raise NoKeyspaceError("No keyspace specified and no current keyspace")
+        print('')
+        ksmeta = self.get_keyspace_meta(ksname)
+        try:
+            usertype = ksmeta.user_types[typename]
+        except KeyError:
+            raise UserTypeNotFound("User type {} not found".format(typename))
+        print(usertype.export_as_string())
+
+    def _columnize_unicode(self, name_list, quote=False):
         """
         Used when columnizing identifiers that may contain unicode
         """
         names = [n for n in name_list]
+        if quote:
+            names = protect_names(names)
         cmd.Cmd.columnize(self, names)
         print('')
+
+    def describe_cluster_client(self):
+        print('\nCluster: %s' % self.get_cluster_name())
+        p = trim_if_present(self.get_partitioner(), 'org.apache.cassandra.dht.')
+        print('Partitioner: %s\n' % p)
+        # TODO: snitch?
+        # snitch = trim_if_present(self.get_snitch(), 'org.apache.cassandra.locator.')
+        # print 'Snitch: %s\n' % snitch
+        if self.current_keyspace is not None and self.current_keyspace != 'system':
+            print("Range ownership:")
+            ring = self.get_ring(self.current_keyspace)
+            for entry in list(ring.items()):
+                print(' %39s  [%s]' % (str(entry[0].value), ', '.join([host.address for host in entry[1]])))
+            print('')
+
+    def describe_schema_client(self, include_system=False):
+        print('')
+        for k in self.get_keyspaces():
+            if include_system or k.name not in cql3handling.SYSTEM_KEYSPACES:
+                self.print_recreate_keyspace(k, sys.stdout)
+                print('')
 
     def do_describe(self, parsed):
 
@@ -1353,15 +1546,68 @@ class Shell(cmd.Cmd):
           where object can be either a keyspace or a table or an index or a materialized
           view (in this order).
         """
-        stmt = SimpleStatement(parsed.extract_orig(), consistency_level=cassandra.ConsistencyLevel.LOCAL_ONE, fetch_size=self.page_size if self.use_paging else None)
-        future = self.session.execute_async(stmt)
-
         if self.connection_versions['build'][0] < '4':
-            print('\nWARN: DESCRIBE|DESC was moved to server side in Cassandra 4.0. As a consequence DESRIBE|DESC '
-                  'will not work in cqlsh %r connected to Cassandra %r, the version that you are connected to. '
-                  'DESCRIBE does not exist server side prior Cassandra 4.0.'
-                  % (version, self.connection_versions['build']))
+            what = parsed.matched[1][1].lower()
+            if what == 'functions':
+                self.describe_functions_client(self.current_keyspace)
+            elif what == 'function':
+                ksname = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                functionname = self.cql_unprotect_name(parsed.get_binding('udfname'))
+                self.describe_function_client(ksname, functionname)
+            elif what == 'aggregates':
+                self.describe_aggregates_client(self.current_keyspace)
+            elif what == 'aggregate':
+                ksname = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                aggregatename = self.cql_unprotect_name(parsed.get_binding('udaname'))
+                self.describe_aggregate_client(ksname, aggregatename)
+            elif what == 'keyspaces':
+                self.describe_keyspaces()
+            elif what == 'keyspace':
+                ksname = self.cql_unprotect_name(parsed.get_binding('ksname', ''))
+                if not ksname:
+                    ksname = self.current_keyspace
+                    if ksname is None:
+                        self.printerr('Not in any keyspace.')
+                        return
+                self.describe_keyspace_client(ksname)
+            elif what in ('columnfamily', 'table'):
+                ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                cf = self.cql_unprotect_name(parsed.get_binding('cfname'))
+                self.describe_columnfamily_client(ks, cf)
+            elif what == 'index':
+                ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                idx = self.cql_unprotect_name(parsed.get_binding('idxname', None))
+                self.describe_index_client(ks, idx)
+            elif what == 'materialized' and parsed.matched[2][1].lower() == 'view':
+                ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                mv = self.cql_unprotect_name(parsed.get_binding('mvname'))
+                self.describe_materialized_view_client(ks, mv)
+            elif what in ('columnfamilies', 'tables'):
+                self.describe_columnfamilies_client(self.current_keyspace)
+            elif what == 'types':
+                self.describe_usertypes_client(self.current_keyspace)
+            elif what == 'type':
+                ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                ut = self.cql_unprotect_name(parsed.get_binding('utname'))
+                self.describe_usertype_client(ks, ut)
+            elif what == 'cluster':
+                self.describe_cluster_client()
+            elif what == 'schema':
+                self.describe_schema_client(False)
+            elif what == 'full' and parsed.matched[2][1].lower() == 'schema':
+                self.describe_schema_client(True)
+            elif what:
+                ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+                name = self.cql_unprotect_name(parsed.get_binding('cfname'))
+                if not name:
+                    name = self.cql_unprotect_name(parsed.get_binding('idxname', None))
+                if not name:
+                    name = self.cql_unprotect_name(parsed.get_binding('mvname', None))
+                self.describe_object_client(ks, name)
         else:
+            stmt = SimpleStatement(parsed.extract_orig(), consistency_level=cassandra.ConsistencyLevel.LOCAL_ONE,
+                                   fetch_size=self.page_size if self.use_paging else None)
+            future = self.session.execute_async(stmt)
             try:
                 result = future.result()
 
