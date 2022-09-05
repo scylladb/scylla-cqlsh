@@ -28,7 +28,9 @@ def get_extensions():
 
 setup(
     name="cassandra-pylib",
-    description="Cassandra Python Libraries",
-    packages=["cqlshlib"],
+    install_requires=[
+        "scylla-driver",
+        "six",
+    ],
     ext_modules=get_extensions(),
 )
