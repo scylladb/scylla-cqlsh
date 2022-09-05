@@ -13,13 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from os.path import join
+from os.path import join, dirname
 
 from .basecase import BaseTestCase, cassandra_dir
 from cqlshlib.cqlhandling import cql_keywords_reserved
 
-RESERVED_KEYWORDS_SOURCE = join(cassandra_dir, 'src', 'resources', 'org', 'apache', 'cassandra', 'cql3', 'reserved_keywords.txt')
+RESERVED_KEYWORDS_SOURCE = join(dirname(__file__), 'reserved_keywords.txt')
 
 
 class TestConstants(BaseTestCase):
