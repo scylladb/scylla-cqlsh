@@ -134,7 +134,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster
 from cassandra.cqltypes import cql_typename
 from cassandra.marshal import int64_unpack
-from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata)
+from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata, protect_name, protect_names, protect_value)
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
 from cassandra.util import datetime_from_timestamp
@@ -154,7 +154,7 @@ from cqlshlib.formatting import (DEFAULT_DATE_FORMAT, DEFAULT_NANOTIME_FORMAT,
                                  format_by_type)
 from cqlshlib.tracing import print_trace, print_trace_session
 from cqlshlib.util import get_file_encoding_bomsize
-from cqlshlib.util import is_file_secure
+from cqlshlib.util import is_file_secure, trim_if_present
 
 
 DEFAULT_HOST = '127.0.0.1'
