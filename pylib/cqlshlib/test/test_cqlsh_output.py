@@ -979,3 +979,35 @@ class TestCqlshOutput(BaseTestCase):
         row_headers = [s for s in output.splitlines() if "@ Row" in s]
         row_ids = [int(s.split(' ')[2]) for s in row_headers]
         self.assertEqual([i for i in range(1, 21)], row_ids)
+
+    def test_scylla_tags(self):
+        ks = get_keyspace()
+        qks = quote_name(ks)
+
+        expected = dedent(f"""
+        CREATE TABLE {ks}.ccc (
+            pkey int PRIMARY KEY
+        ) WITH bloom_filter_fp_chance = 0.01
+            AND caching = {{'keys': 'ALL', 'rows_per_partition': 'ALL'}}
+            AND comment = ''
+            AND compaction = {{'class': 'SizeTieredCompactionStrategy'}}
+            AND compression = {{'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}}
+            AND crc_check_chance = 1.0
+            AND dclocal_read_repair_chance = 0.0
+            AND default_time_to_live = 0
+            AND gc_grace_seconds = 864000
+            AND max_index_interval = 2048
+            AND memtable_flush_period_in_ms = 0
+            AND min_index_interval = 128
+            AND read_repair_chance = 0.0
+            AND speculative_retry = '99.0PERCENTILE';
+        
+        cdc = {{'delta': 'full', 'enabled': 'true', 'postimage': 'false', 'preimage': 'false', 'ttl': '86400'}}
+        """)
+
+        with testrun_cqlsh(tty=True, env=self.default_env) as c:
+
+            output = c.cmd_and_response(f"CREATE TABLE  {qks}.ccc (pkey int,  PRIMARY KEY(pkey))  WITH cdc = {{'enabled': true}};")
+            self.assertEquals(output.strip(),  "")
+            output = c.cmd_and_response('describe table {}.ccc'.format(qks))
+            self.assertSequenceEqual(dedent(output).split('\n'), expected.split('\n'))
