@@ -44,6 +44,9 @@ class CqlshCompletionCase(BaseTestCase):
     @classmethod
     def setUpClass(cls):
         create_db()
+        with testrun_cqlsh() as c:
+            output = c.cmd_and_response("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
+            cls.is_scylla = '1 rows' in output
 
     @classmethod
     def tearDownClass(cls):
@@ -841,8 +844,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
     def test_complete_in_alter_keyspace(self):
         self.trycompletions('ALTER KEY', 'SPACE ')
         self.trycompletions('ALTER KEYSPACE ', '', choices=[self.cqlsh.keyspace, 'system_auth',
-                                                            'system_distributed', 'system_traces',
-                                                            'system_distributed_everywhere', 'IF'])
+                                                            'system_distributed', 'system_traces', 'IF'])
         self.trycompletions('ALTER KEYSPACE I', immediate='F EXISTS ')
         self.trycompletions('ALTER KEYSPACE system_trac', "es WITH replication = {'class': '")
         self.trycompletions("ALTER KEYSPACE system_traces WITH replication = {'class': '", '',
@@ -923,10 +925,11 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                      'dynamic_columns',
                                                      'twenty_rows_composite_table',
                                                      'utf8_with_special_chars',
-                                                     'system_traces.', 'songs', 'system_views.',
-                                                     'system_virtual_schema.',
+                                                     'system_traces.', 'songs',
                                                      'system_schema.', 'system_distributed.',
-                                                     self.cqlsh.keyspace + '.'])
+                                                     self.cqlsh.keyspace + '.'] +
+                                                    ['system_distributed_everywhere.'] if self.is_scylla else
+                                                    ['system_views.', 'system_virtual_schema.'])
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD ', choices=['<new_column_name>', 'IF'])
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
         self.trycompletions('ALTER TABLE new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
@@ -936,11 +939,12 @@ class TestCqlshCompletion(CqlshCompletionCase):
 
     def test_complete_in_alter_type(self):
         self.trycompletions('ALTER TYPE I', immediate='F EXISTS ')
-        self.trycompletions('ALTER TYPE ', choices=['IF', 'system_views.',
+        self.trycompletions('ALTER TYPE ', choices=['IF',
                                                     'tags', 'system_traces.', 'system_distributed.',
                                                     'phone_number', 'band_info_type', 'address', 'system.', 'system_schema.',
-                                                    'system_auth.', 'system_virtual_schema.', self.cqlsh.keyspace + '.'
-                                                    ])
+                                                    'system_auth.', self.cqlsh.keyspace + '.'
+                                                    ] + ['system_distributed_everywhere.'] if self.is_scylla else
+                                                        ['system_views.', 'system_virtual_schema.'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD ', choices=['<new_field_name>', 'IF'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD IF NOT EXISTS ', choices=['<new_field_name>'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type RENAME ', choices=['IF', '<quotedName>', '<identifier>'])
