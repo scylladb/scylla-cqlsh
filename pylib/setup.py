@@ -15,19 +15,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import sys
-from distutils.core import setup
+import warnings
+from distutils.core import setup, Extension
 
 
 def get_extensions():
-    if "--no-compile" in sys.argv:
-        return []
+    if "--no-compile" not in sys.argv:
+        try:
+            from Cython.Build import cythonize
+            return cythonize(Extension(name='copyutil', sources=["cqlshlib/copyutil.py"], define_macros=[("CYTHON_LIMITED_API", "1")]))
+        except ImportError:
+            warnings.warn("installing cython could speed things up for you; `pip install cython`")
+    return []
 
-    from Cython.Build import cythonize
-    return cythonize("cqlshlib/copyutil.py")
 
 setup(
-    name="cassandra-pylib",
+    name="scylla-cqlsh",
     install_requires=[
         "scylla-driver",
         "six",

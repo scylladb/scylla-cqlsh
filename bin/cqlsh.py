@@ -59,7 +59,7 @@ try:
 except ImportError:
     pass
 
-CQL_LIB_PREFIX = 'cassandra-driver-internal-only-'
+CQL_LIB_PREFIX = 'scylla-driver-'
 
 CASSANDRA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
 CASSANDRA_CQL_HTML_FALLBACK = 'https://cassandra.apache.org/doc/latest/cql/index.html'
@@ -109,11 +109,10 @@ def find_zip(libprefix):
 
 cql_zip = find_zip(CQL_LIB_PREFIX)
 if cql_zip:
-    ver = os.path.splitext(os.path.basename(cql_zip))[0][len(CQL_LIB_PREFIX):]
-    sys.path.insert(0, os.path.join(cql_zip, 'cassandra-driver-' + ver))
+    sys.path.insert(0, cql_zip)
 
 # the driver needs dependencies
-third_parties = ('six-', 'pure_sasl-')
+third_parties = ('six-', 'pure_sasl-', 'PyYAML-')
 
 for lib in third_parties:
     lib_zip = find_zip(lib)
