@@ -1,0 +1,13 @@
+Source: %{product}-cqlsh
+Section: misc
+Priority: extra
+Maintainer: Israel Fruchter <fruch@scylladb.com>
+Homepage: http://www.scylladb.com
+Standards-Version: 3.9.5
+Rules-Requires-Root: no
+
+Package: %{product}-cqlsh
+Architecture: all
+Depends: python3
+Conflicts: cassandra
+Description: cqlsh is a Python-based command-line client for running CQL commands on a cassandra cluster.

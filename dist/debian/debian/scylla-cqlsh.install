@@ -1,0 +1,5 @@
+usr/bin/cqlsh
+usr/bin/cqlsh.py
+opt/scylladb/share/cassandra/lib/*
+opt/scylladb/share/cassandra/bin/*
+opt/scylladb/share/cassandra/pylib/*
