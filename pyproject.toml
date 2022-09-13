@@ -8,5 +8,5 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-write_to = "cqlshlib/_version.py"
+write_to = "pylib/cqlshlib/_version.py"
 tag_regex = '^(?P<prefix>v)?(?P<version>[^\+-]+)(?P<suffix>-scylla)?$'
