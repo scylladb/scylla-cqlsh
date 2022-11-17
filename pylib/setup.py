@@ -34,7 +34,7 @@ def get_extensions():
 setup(
     name="scylla-cqlsh",
     install_requires=[
-        "scylla-driver",
+        "scylla-driver >= 3.25.10",
         "six",
     ],
     ext_modules=get_extensions(),
