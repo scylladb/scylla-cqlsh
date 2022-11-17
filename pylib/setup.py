@@ -38,4 +38,12 @@ setup(
         "six",
     ],
     ext_modules=get_extensions(),
+    license="Apache",
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Environment :: Console",
+        "Topic :: Database :: Front-Ends",
+        "License :: OSI Approved :: Apache Software License",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
 )

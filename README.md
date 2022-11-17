@@ -1,19 +1,35 @@
 # scylla-cqlsh
 
-A fork of the cqlsh from https://github.com/apache/cassandra
+Command line tool to connect to [scylladb](http://www.scylladb.com) (or Apache Cassandra)
 
-## Creation of the repo:
+A fork of the cqlsh tool from https://github.com/apache/cassandra
+
+![Libraries.io dependency status for latest release](https://img.shields.io/librariesio/release/pypi/scylla-cqlsh)
+![GitHub branch checks state](https://img.shields.io/github/checks-status/scylladb/scylla-cqlsh/master)
+![PyPI](https://img.shields.io/pypi/v/scylla-cqlsh)
+
+# Quickstart
 
 ```bash
-git clone  -b trunk --single-branch git@github.com:apache/cassandra.git
-sudo apt-get install git-filter-repo
-cd cassandra
+pip install scylla-cqlsh
 
-git filter-repo --path bin/cqlsh --path bin/cqlsh.py --path pylib/
+cqlsh ${SCYLLA_HOST} -e 'SELECT * FROM system.local'
+
+# or just using it interactively
+cqlsh ${SCYLLA_HOST} 
 ```
 
+# Contributing
 
-# Testing:
+Feel free to open a PR/issues with suggestion and improvement
+Try covering you suggested change with a test, and the instruction 
+for running tests are below
+
+## Testing
+
+Dependent 
+* python 2.7/3.x (recommend virtualenv)
+* minium java8
 
 ```bash
 pip install -e .
@@ -34,4 +50,18 @@ ccm create cqlsh_cluster -n 1 --scylla --version unstable/master:latest
 ccm start
 
 pytest
+```
+
+
+## Creation of the repo
+
+A reference on how this we forked out of cassandra repo
+So we can repeat the process if we want to bring change back it
+
+```bash
+git clone  -b trunk --single-branch git@github.com:apache/cassandra.git
+sudo apt-get install git-filter-repo
+cd cassandra
+
+git filter-repo --path bin/cqlsh --path bin/cqlsh.py --path pylib/
 ```
