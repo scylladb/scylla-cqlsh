@@ -17,7 +17,12 @@ cqlsh ${SCYLLA_HOST} -e 'SELECT * FROM system.local'
 
 # or just using it interactively
 cqlsh ${SCYLLA_HOST} 
+
+# or using it with scylla-cloud
+cqlsh --cloudconf [path to connection bundle downloaded]
 ```
+
+
 
 # Contributing
 
