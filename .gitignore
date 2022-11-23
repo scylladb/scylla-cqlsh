@@ -1,0 +1,11 @@
+lib/**
+!dist/debin
+!dist/redhat
+
+build.properties                                                                                                                                                               
+build/**                                                                                                                                                                         
+dist/*.tar.gz
+
+pylib/cqlshlib/_version.py
+pylib/cqlshlib/copyutil.c
+*.egg-info/
