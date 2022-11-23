@@ -29,7 +29,7 @@ for running tests are below
 
 Dependent 
 * python 2.7/3.x (recommend virtualenv)
-* minium java8
+* minimum java8
 
 ```bash
 pip install -e .
