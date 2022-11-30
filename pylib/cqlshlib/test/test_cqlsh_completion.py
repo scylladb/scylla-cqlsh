@@ -725,8 +725,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                      'utf8_with_special_chars',
                                      'system_traces.', 'songs',
                                      'system_distributed.',
-                                     'system_distributed_everywhere.',
-                                     self.cqlsh.keyspace + '.'],
+                                     self.cqlsh.keyspace + '.'] +
+                                     (['system_distributed_everywhere.'] if self.is_scylla else []),
                             other_choices_ok=True)
 
         self.trycompletions('DESC TYPE ',
@@ -928,8 +928,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                      'system_traces.', 'songs',
                                                      'system_schema.', 'system_distributed.',
                                                      self.cqlsh.keyspace + '.'] +
-                                                    ['system_distributed_everywhere.'] if self.is_scylla else
-                                                    ['system_views.', 'system_virtual_schema.'])
+                                                     (['system_distributed_everywhere.'] if self.is_scylla else
+                                                      ['system_views.', 'system_virtual_schema.']))
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD ', choices=['<new_column_name>', 'IF'])
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
         self.trycompletions('ALTER TABLE new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
@@ -943,8 +943,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                     'tags', 'system_traces.', 'system_distributed.',
                                                     'phone_number', 'band_info_type', 'address', 'system.', 'system_schema.',
                                                     'system_auth.', self.cqlsh.keyspace + '.'
-                                                    ] + ['system_distributed_everywhere.'] if self.is_scylla else
-                                                        ['system_views.', 'system_virtual_schema.'])
+                                                    ] + (['system_distributed_everywhere.'] if self.is_scylla else
+                                                        ['system_views.', 'system_virtual_schema.']))
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD ', choices=['<new_field_name>', 'IF'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD IF NOT EXISTS ', choices=['<new_field_name>'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type RENAME ', choices=['IF', '<quotedName>', '<identifier>'])

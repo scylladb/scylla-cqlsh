@@ -21,6 +21,8 @@ import locale
 import os
 import re
 
+import pytest
+
 from .basecase import (BaseTestCase, TEST_HOST, TEST_PORT,
                        at_a_time, cqlshlog, dedent)
 from .cassconnect import (cassandra_cursor, create_db, get_keyspace,
@@ -981,6 +983,8 @@ class TestCqlshOutput(BaseTestCase):
         self.assertEqual([i for i in range(1, 21)], row_ids)
 
     def test_scylla_tags(self):
+        if not self.is_scylla:
+            pytest.skip("supported test only in scylla")
         ks = get_keyspace()
         qks = quote_name(ks)
 
