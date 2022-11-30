@@ -1,7 +1,12 @@
 name: Build/Test and Upload to PyPi
 
-on: [push, pull_request]
-
+on:
+  pull_request:
+    branches:
+     - master
+  push:
+    branches:
+      - master
 
 env:
   CIBW_SKIP: cp36*
