@@ -509,7 +509,10 @@ class Shell(cmd.Cmd):
 
         self.display_timezone = display_timezone
 
+        self.scylla_version = None
+
         self.get_connection_versions()
+        self.get_scylla_version()
         self.set_expanded_cql_version(self.connection_versions['cql'])
 
         self.current_keyspace = keyspace
@@ -603,7 +606,11 @@ class Shell(cmd.Cmd):
         # system.Versions['cql'] apparently does not reflect changes with
         # set_cql_version.
         vers['cql'] = self.cql_version
-        print("[cqlsh %(shver)s | Cassandra %(build)s | CQL spec %(cql)s | Native protocol v%(protocol)s]" % vers)
+        if self.scylla_version:
+            vers['build'] = "Scylla {0}".format(self.scylla_version)
+        else:
+            vers['build'] = "Cassandra %(build)s" % vers
+        print("[cqlsh %(shver)s | %(build)s | CQL spec %(cql)s | Native protocol v%(protocol)s]" % vers)
 
     def show_session(self, sessionid, partial_session=False):
         print_trace_session(self, self.session, sessionid, partial_session)
@@ -623,6 +630,13 @@ class Shell(cmd.Cmd):
             'cql': result['cql_version'],
         }
         self.connection_versions = vers
+
+    def get_scylla_version(self):
+        try:
+            result, = self.session.execute("SELECT * FROM system.versions WHERE key = 'local'")
+            self.scylla_version = result['version']
+        except CQL_ERRORS:
+            pass
 
     def get_keyspace_names(self):
         return list(self.conn.metadata.keyspaces)
@@ -1848,6 +1862,7 @@ class Shell(cmd.Cmd):
         showwhat = parsed.get_binding('what').lower()
         if showwhat == 'version':
             self.get_connection_versions()
+            self.get_scylla_version()
             self.show_version()
         elif showwhat == 'host':
             self.show_host()

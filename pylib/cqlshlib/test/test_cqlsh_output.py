@@ -841,7 +841,7 @@ class TestCqlshOutput(BaseTestCase):
         with testrun_cqlsh(tty=True, env=self.default_env) as c:
             output = c.cmd_and_response('show version;')
             self.assertRegex(output,
-                    r'^\[cqlsh \S+ \| Cassandra \S+ \| CQL spec \S+ \| Native protocol \S+\]$')
+                    r'^\[cqlsh \S+ \| (Cassandra|Scylla) \S+ \| CQL spec \S+ \| Native protocol \S+\]$')
 
             output = c.cmd_and_response('show host;')
             self.assertHasColors(output)
