@@ -40,8 +40,8 @@ jobs:
         with:
           path: dist/*.tar.gz
 
-  integration_test:
-    name: Integration Tests
+  integration_test_scylla:
+    name: Integration Tests (Scylla)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -61,8 +61,29 @@ jobs:
           pip install -r ./pylib/requirements.txt
           pytest ./cqlshlib/test
 
+  integration_test_cassandra:
+    name: Integration Tests (Cassandra)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Start Scylla
+        run: |
+          export DOCKER_ID=$(docker run -d -e CASSANDRA_CLUSTER_NAME=test cassandra:4.1 )
+          export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+          while ! nc -z ${CQL_TEST_HOST} 9042; do
+                  sleep 0.1 # wait for 1/10 of the second before check again
+          done
+
+          echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
+
+      - name: pytest
+        run: |
+          pip install -r ./pylib/requirements.txt
+          pytest ./cqlshlib/test
+
   upload_pypi:
-    needs: [build_wheels, build_sdist, integration_test]
+    needs: [build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
