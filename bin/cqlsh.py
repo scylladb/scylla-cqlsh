@@ -1569,7 +1569,7 @@ class Shell(cmd.Cmd):
                 aggregatename = self.cql_unprotect_name(parsed.get_binding('udaname'))
                 self.describe_aggregate_client(ksname, aggregatename)
             elif what == 'keyspaces':
-                self.describe_keyspaces()
+                self.describe_keyspaces_client()
             elif what == 'keyspace':
                 ksname = self.cql_unprotect_name(parsed.get_binding('ksname', ''))
                 if not ksname:
