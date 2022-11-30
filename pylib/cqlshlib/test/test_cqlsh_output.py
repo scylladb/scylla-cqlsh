@@ -20,8 +20,10 @@
 import locale
 import os
 import re
+from packaging.version import Version
 
 import pytest
+from cassandra import InvalidRequest
 
 from .basecase import (BaseTestCase, TEST_HOST, TEST_PORT,
                        at_a_time, cqlshlog, dedent)
@@ -47,11 +49,14 @@ class TestCqlshOutput(BaseTestCase):
 
     @classmethod
     def get_cassandra_metadata(cls):
-        with testrun_cqlsh() as c:
-            output = c.cmd_and_response("select release_version from system.local where key = 'local';")
-            cls.release_version = output.splitlines()[-1].strip()
-            output = c.cmd_and_response("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
-            cls.is_scylla = '1 rows' in output
+        with cassandra_cursor(ks=None) as curs:
+            output = curs.execute("select release_version from system.local where key = 'local';")
+            cls.release_version = Version(output.one().release_version)
+            try:
+                output = curs.execute("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
+                cls.is_scylla = len(output.all()) == 1
+            except InvalidRequest:
+                cls.is_scylla = False
 
     def setUp(self):
         env = os.environ.copy()
@@ -802,7 +807,7 @@ class TestCqlshOutput(BaseTestCase):
         '''
 
         with testrun_cqlsh(tty=True, keyspace=None, env=self.default_env) as c:
-            if self.release_version[0] < '4':
+            if self.release_version < Version('4.0'):
                 output_re = output_re_client
                 ringinfo_re = ringinfo_re_client
             # not in a keyspace
