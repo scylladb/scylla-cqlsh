@@ -1,0 +1,10 @@
+.github
+**/.pytest_cache
+**/__pycache__
+.envrc
+dist
+build
+*.so
+tmp/
+*.egg-info
+**/cqlshlib/tests/*

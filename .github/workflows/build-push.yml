@@ -47,6 +47,7 @@ jobs:
 
   integration_test_scylla:
     name: Integration Tests (Scylla)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -68,6 +69,7 @@ jobs:
 
   integration_test_cassandra:
     name: Integration Tests (Cassandra)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -86,6 +88,47 @@ jobs:
         run: |
           pip install -r ./pylib/requirements.txt
           pytest ./cqlshlib/test
+
+  docker:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: determine docker tag base on tag
+        if: endsWith(github.event.ref, '-scylla')
+        shell: bash
+        run: |
+          split=(${GITHUB_REF_NAME//-/ })
+          DOCKER_TAG=${split[0]}
+          echo DOCKER_TAG=$DOCKER_TAG >> $GITHUB_ENV
+
+      - name: Build and push release
+        if: endsWith(github.event.ref, '-scylla')
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            scylladb/scylla-cqlsh:${{ env.DOCKER_TAG }}
+            scylladb/scylla-cqlsh:latest
+
+      - name: Build and push master
+        uses: docker/build-push-action@v3
+        if: endsWith(github.event.ref, 'master')
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            scylladb/scylla-cqlsh:master
 
   upload_pypi:
     needs: [build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
