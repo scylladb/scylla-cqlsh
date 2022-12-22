@@ -36,8 +36,8 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %{_bindir}/cqlsh
 %{_bindir}/cqlsh.py
-/opt/scylladb/share/cassandra/bin/cqlsh
-/opt/scylladb/share/cassandra/bin/cqlsh.py
+/opt/scylladb/share/cassandra/bin/*
+/opt/scylladb/share/cassandra/libexec/*
 /opt/scylladb/share/cassandra/pylib/*
 /opt/scylladb/share/cassandra/lib/*
 
