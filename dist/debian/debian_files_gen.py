@@ -46,22 +46,6 @@ if os.path.exists('build/debian/debian'):
     shutil.rmtree('build/debian/debian')
 shutil.copytree('dist/debian/debian', 'build/debian/debian')
 
-if product != 'scylla':
-    for p in Path('build/debian/debian').glob('scylla-*'):
-        # pat1: scylla-server.service
-        #    -> scylla-enterprise-server.scylla-server.service
-        # pat2: scylla-server.scylla-fstrim.service
-        #    -> scylla-enterprise-server.scylla-fstrim.service
-        # pat3: scylla-conf.install
-        #    -> scylla-enterprise-conf.install
-
-        if m := re.match(r'^scylla(-[^.]+)\.service$', p.name):
-            p.rename(p.parent / f'{product}{m.group(1)}.{p.name}')
-        elif m := re.match(r'^scylla(-[^.]+\.scylla-[^.]+\.[^.]+)$', p.name):
-            p.rename(p.parent / f'{product}{m.group(1)}')
-        else:
-            p.rename(p.parent / p.name.replace('scylla', product, 1))
-
 s = DebianFilesTemplate(changelog_template)
 changelog_applied = s.substitute(product=product, version=version, release=release, revision='1', codename='stable')
 
