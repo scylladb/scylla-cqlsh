@@ -43,4 +43,5 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
-* initial release
+* Wed Sep 14 2022 Israel Fruchter <fruch@scylladb.com>
+- initial release
