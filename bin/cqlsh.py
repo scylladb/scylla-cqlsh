@@ -141,6 +141,7 @@ from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata,
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
 from cassandra.util import datetime_from_timestamp
+from cassandra.connection import DRIVER_NAME, DRIVER_VERSION
 
 # cqlsh should run correctly when run out of a Cassandra source tree,
 # out of an unpacked Cassandra tarball, and after a proper package install.
@@ -484,9 +485,11 @@ class Shell(cmd.Cmd):
             }
 
             if cloudconf is None:
+                assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
                 kwargs['contact_points'] = (self.hostname,)
                 kwargs['port'] = self.port
                 kwargs['ssl_options'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
+                kwargs['scylla_cloud'] = cloudconf
                 profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
 
             self.conn = Cluster(cql_version=cqlver,
@@ -494,7 +497,6 @@ class Shell(cmd.Cmd):
                                 control_connection_timeout=connect_timeout,
                                 connect_timeout=connect_timeout,
                                 execution_profiles=profiles,
-                                scylla_cloud=cloudconf,
                                 **kwargs)
         self.owns_connection = not use_conn
 
@@ -2124,12 +2126,13 @@ class Shell(cmd.Cmd):
                 kwargs['port'] = self.port
                 kwargs['ssl_options'] = self.conn.ssl_options
                 kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
+                kwargs['scylla_cloud'] = self.cloudconf
+
         conn = Cluster(cql_version=self.conn.cql_version,
                        protocol_version=self.conn.protocol_version,
                        auth_provider=auth_provider,
                        control_connection_timeout=self.conn.connect_timeout,
                        connect_timeout=self.conn.connect_timeout,
-                       scylla_cloud=self.cloudconf,
                        **kwargs)
 
         if self.current_keyspace:
