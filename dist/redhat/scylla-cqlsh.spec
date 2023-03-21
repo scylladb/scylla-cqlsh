@@ -4,6 +4,7 @@ Release:        %{release}%{?dist}
 Summary:        cqlsh is a Python-based command-line client for running CQL commands on a cassandra cluster.
 Group:          Applications/Databases
 Provides:       %{product}-cqlsh
+Obsoletes:      %{product}-tools < 5.2
 
 License:        Apache
 URL:            http://www.scylladb.com/
