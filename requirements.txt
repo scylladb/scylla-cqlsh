@@ -1,5 +1,4 @@
 scylla-driver==3.25.10
-six==1.16.0
 geomet==0.2.1.post1
 PyYAML==6.0
 click==8.1.3
