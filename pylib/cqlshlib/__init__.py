@@ -73,3 +73,18 @@ class ScyllaTagsExt(RegisteredTableExtension):
         mer = MapExtensionReader(ext_blob)
         return "%s = %s" % (ext_key, mer.read_map())
 
+
+# Add a handler for scylla_encryption_options extension to at least print
+# the info when doing "desc <table>".
+#
+# The end result will not be cut-and-paste usable; we'd need to modify the
+# driver for this. But it is something.
+class Encr(RegisteredTableExtension):
+    name = 'scylla_encryption_options'
+
+    @classmethod
+    def after_table_cql(cls, table_meta, ext_key, ext_blob):
+        # For scylla_encryption_options, the blob is actually
+        # a serialized unorderd_map<string, string>.
+        mer = MapExtensionReader(ext_blob)
+        return "%s = %s" % (ext_key, mer.read_map())
