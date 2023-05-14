@@ -27,12 +27,17 @@ import os
 import tarfile
 import pathlib
 
+def erase_uid(tarinfo):
+    tarinfo.uid = tarinfo.gid = 0
+    tarinfo.uname = tarinfo.gname = 'root'
+    return tarinfo
+
 RELOC_PREFIX='scylla-cqlsh'
-def reloc_add(self, name, arcname=None, recursive=True, *, filter=None):
+def reloc_add(self, name, arcname=None):
     if arcname:
-        return self.add(name, arcname="{}/{}".format(RELOC_PREFIX, arcname))
+        return self.add(name, arcname="{}/{}".format(RELOC_PREFIX, arcname), filter=erase_uid)
     else:
-        return self.add(name, arcname="{}/{}".format(RELOC_PREFIX, name))
+        return self.add(name, arcname="{}/{}".format(RELOC_PREFIX, name), filter=erase_uid)
 
 tarfile.TarFile.reloc_add = reloc_add
 
@@ -51,7 +56,7 @@ ar = tarfile.open(output, mode='w|gz')
 # relocatable package format version = 2
 with open('build/.relocatable_package_version', 'w') as f:
     f.write('2\n')
-ar.add('build/.relocatable_package_version', arcname='.relocatable_package_version')
+ar.add('build/.relocatable_package_version', arcname='.relocatable_package_version', filter=erase_uid)
 
 pathlib.Path('build/SCYLLA-RELOCATABLE-FILE').touch()
 ar.reloc_add('build/SCYLLA-RELOCATABLE-FILE', arcname='SCYLLA-RELOCATABLE-FILE')
