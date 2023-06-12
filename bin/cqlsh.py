@@ -485,12 +485,13 @@ class Shell(cmd.Cmd):
             }
 
             if cloudconf is None:
-                assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
                 kwargs['contact_points'] = (self.hostname,)
                 kwargs['port'] = self.port
                 kwargs['ssl_options'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
-                kwargs['scylla_cloud'] = cloudconf
                 profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
+            else:
+                assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
+                kwargs['scylla_cloud'] = cloudconf
 
             self.conn = Cluster(cql_version=cqlver,
                                 auth_provider=self.auth_provider,
@@ -2122,11 +2123,12 @@ class Shell(cmd.Cmd):
 
         kwargs = {}
         if self.cloudconf is None:
-                kwargs['contact_points'] = (self.hostname,)
-                kwargs['port'] = self.port
-                kwargs['ssl_options'] = self.conn.ssl_options
-                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
-                kwargs['scylla_cloud'] = self.cloudconf
+            kwargs['contact_points'] = (self.hostname,)
+            kwargs['port'] = self.port
+            kwargs['ssl_options'] = self.conn.ssl_options
+            kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
+        else:
+            kwargs['scylla_cloud'] = self.cloudconf
 
         conn = Cluster(cql_version=self.conn.cql_version,
                        protocol_version=self.conn.protocol_version,
