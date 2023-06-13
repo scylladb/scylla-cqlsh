@@ -33,6 +33,7 @@ path_to_cqlsh = join(cqlsh_dir, 'cqlsh.py')
 sys.path.append(cqlsh_dir)
 
 TEST_HOST = os.environ.get('CQL_TEST_HOST', '127.0.0.1')
+TEST_BUNDLE_PATH = os.environ.get('CQL_TEST_BUNDLE_PATH')
 TEST_PORT = int(os.environ.get('CQL_TEST_PORT', 9042))
 TEST_USER = os.environ.get('CQL_TEST_USER', 'cassandra')
 TEST_PWD = os.environ.get('CQL_TEST_PWD')
