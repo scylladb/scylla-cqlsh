@@ -26,7 +26,7 @@ from cassandra.metadata import maybe_escape_name as quote_name
 from cassandra.auth import PlainTextAuthProvider
 from cqlshlib.cql3handling import CqlRuleSet
 
-from .basecase import TEST_HOST, TEST_PORT, TEST_USER, TEST_PWD, cqlshlog, test_dir
+from .basecase import TEST_HOST, TEST_PORT, TEST_USER, TEST_PWD, cqlshlog, test_dir, TEST_BUNDLE_PATH
 from .run_cqlsh import run_cqlsh, call_cqlsh
 
 test_keyspace_init = os.path.join(test_dir, 'test_keyspace_init.cql')
@@ -35,7 +35,10 @@ test_keyspace_init = os.path.join(test_dir, 'test_keyspace_init.cql')
 def get_cassandra_connection(cql_version=None):
 
     auth_provider = PlainTextAuthProvider(username=TEST_USER, password=TEST_PWD)
-    conn = Cluster((TEST_HOST,), TEST_PORT, auth_provider=auth_provider, cql_version=cql_version)
+    if TEST_BUNDLE_PATH:
+        conn = Cluster(scylla_cloud=TEST_BUNDLE_PATH, auth_provider=auth_provider, cql_version=cql_version)
+    else:
+        conn = Cluster((TEST_HOST,), TEST_PORT, auth_provider=auth_provider, cql_version=cql_version)
 
     # until the cql lib does this for us
     conn.cql_version = cql_version
