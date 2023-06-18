@@ -11,7 +11,7 @@ on:
       - master
 
 env:
-  CIBW_SKIP: cp36* pp39-macosx*
+  CIBW_SKIP: cp36*
 
 jobs:
   build_wheels:
