@@ -2445,7 +2445,7 @@ def read_options(cmdlineargs, environment):
     optvalues.encoding = option_with_default(configs.get, 'ui', 'encoding', UTF8)
 
     optvalues.tty = option_with_default(configs.getboolean, 'ui', 'tty', sys.stdin.isatty())
-    optvalues.protocol_version = option_with_default(configs.getint, 'protocol', 'version', None)
+    optvalues.protocol_version = option_with_default(configs.getint, 'protocol', 'version', 4)
     optvalues.cqlversion = option_with_default(configs.get, 'cql', 'version', None)
     optvalues.connect_timeout = option_with_default(configs.getint, 'connection', 'timeout', DEFAULT_CONNECT_TIMEOUT_SECONDS)
     optvalues.request_timeout = option_with_default(configs.getint, 'connection', 'request_timeout', DEFAULT_REQUEST_TIMEOUT_SECONDS)
