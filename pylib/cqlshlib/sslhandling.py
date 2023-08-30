@@ -51,7 +51,7 @@ def ssl_settings(host, config_file, env=os.environ):
     def get_best_tls_protocol(ssl_ver_str):
         if ssl_ver_str:
             print("Warning: Explicit SSL and TLS versions in the cqlshrc file or in SSL_VERSION environment property are ignored as the protocol is auto-negotiated.\n")
-        return ssl.PROTOCOL_TLS
+        return ssl.PROTOCOL_TLS_CLIENT
 
     ssl_validate = env.get('SSL_VALIDATE')
     if ssl_validate is None:
@@ -84,7 +84,13 @@ def ssl_settings(host, config_file, env=os.environ):
     if usercert:
         usercert = os.path.expanduser(usercert)
 
-    return dict(ca_certs=ssl_certfile,
-                cert_reqs=ssl.CERT_REQUIRED if ssl_validate else ssl.CERT_NONE,
-                ssl_version=ssl_version,
-                keyfile=userkey, certfile=usercert)
+    ssl_context = ssl.SSLContext(ssl_version)
+    ssl_context.check_hostname = ssl_validate
+    ssl_context.load_cert_chain(certfile=usercert,
+                                keyfile=userkey)
+
+    ssl_context.verify_mode = ssl.CERT_REQUIRED if ssl_validate else ssl.CERT_NONE
+    if ssl_certfile:
+        ssl_context.load_verify_locations(cafile=ssl_certfile)
+
+    return ssl_context

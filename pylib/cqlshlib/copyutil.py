@@ -1682,7 +1682,7 @@ class ExportProcess(ChildProcess):
             cql_version=self.cql_version,
             protocol_version=self.protocol_version,
             auth_provider=self.auth_provider,
-            ssl_options=ssl_settings(host, self.config_file) if self.ssl else None,
+            ssl_context=ssl_settings(host, self.config_file) if self.ssl else None,
             load_balancing_policy=WhiteListRoundRobinPolicy([host]),
             default_retry_policy=ExpBackoffRetryPolicy(self),
             compression=None,
@@ -2355,7 +2355,7 @@ class ImportProcess(ChildProcess):
                 protocol_version=self.protocol_version,
                 auth_provider=self.auth_provider,
                 load_balancing_policy=FastTokenAwarePolicy(self),
-                ssl_options=ssl_settings(self.hostname, self.config_file) if self.ssl else None,
+                ssl_context=ssl_settings(self.hostname, self.config_file) if self.ssl else None,
                 default_retry_policy=FallthroughRetryPolicy(),  # we throw on timeouts and retry in the error callback
                 compression=None,
                 control_connection_timeout=self.connect_timeout,

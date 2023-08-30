@@ -487,7 +487,7 @@ class Shell(cmd.Cmd):
             if cloudconf is None:
                 kwargs['contact_points'] = (self.hostname,)
                 kwargs['port'] = self.port
-                kwargs['ssl_options'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
+                kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
                 profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
             else:
                 assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
@@ -2125,7 +2125,7 @@ class Shell(cmd.Cmd):
         if self.cloudconf is None:
             kwargs['contact_points'] = (self.hostname,)
             kwargs['port'] = self.port
-            kwargs['ssl_options'] = self.conn.ssl_options
+            kwargs['ssl_context'] = self.conn.ssl_context
             kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
         else:
             kwargs['scylla_cloud'] = self.cloudconf
