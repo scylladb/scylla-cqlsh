@@ -167,7 +167,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                          'COPY', 'CREATE', 'DEBUG', 'DELETE', 'DESC', 'DESCRIBE',
                                          'DROP', 'GRANT', 'HELP', 'INSERT', 'LIST', 'LOGIN', 'PAGING', 'REVOKE',
                                          'SELECT', 'SHOW', 'SOURCE', 'TRACING', 'EXPAND', 'SERIAL', 'TRUNCATE',
-                                         'UPDATE', 'USE', 'exit', 'quit', 'CLEAR', 'CLS'))
+                                         'UPDATE', 'USE', 'exit', 'quit', 'CLEAR', 'CLS', 'ATTACH', 'DETACH'))
 
     def test_complete_command_words(self):
         self.trycompletions('alt', '\b\b\bALTER ')
@@ -254,7 +254,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                      'EXPAND', 'GRANT', 'HELP', 'INSERT', 'LIST', 'LOGIN', 'PAGING',
                      'REVOKE', 'SELECT', 'SHOW', 'SOURCE', 'SERIAL', 'TRACING',
                      'TRUNCATE', 'UPDATE', 'USE', 'exit', 'quit',
-                     'CLEAR', 'CLS'])
+                     'CLEAR', 'CLS', 'ATTACH', 'DETACH'])
 
         self.trycompletions(
             ("INSERT INTO twenty_rows_composite_table (a, b, c) "
@@ -555,7 +555,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('DROP ',
                             choices=['AGGREGATE', 'COLUMNFAMILY', 'FUNCTION',
                                      'INDEX', 'KEYSPACE', 'ROLE', 'TABLE',
-                                     'TRIGGER', 'TYPE', 'USER', 'MATERIALIZED'])
+                                     'TRIGGER', 'TYPE', 'USER', 'MATERIALIZED', 'SERVICE_LEVEL'])
 
     def test_complete_in_drop_keyspace(self):
         self.trycompletions('DROP K', immediate='EYSPACE ')
@@ -954,3 +954,35 @@ class TestCqlshCompletion(CqlshCompletionCase):
 
     def test_complete_in_alter_role(self):
         self.trycompletions('ALTER ROLE ', choices=['<identifier>', 'IF', '<quotedName>'])
+
+    def test_complete_in_alter_service_level(self):
+        self.trycompletions('ALTER SERVICE_LEVEL ', choices=['<identifier>', 'IF', '<quotedName>'])
+
+    def test_complete_in_create_service_level(self):
+        self.trycompletions('CREATE SERVICE_LEVEL "sla" WITH ',
+                            choices=['WORKLOAD_TYPE', 'TIMEOUT', 'SHARES'])
+
+    def test_complete_in_attach_service_level(self):
+        self.trycompletions('ATTACH ',
+                            immediate="SERVICE_LEVEL ")
+        self.trycompletions('ATTACH SERVICE_LEVEL "sla" ',
+                            immediate="TO ")
+        self.trycompletions('ATTACH SERVICE_LEVEL "sla" TO ',
+                            choices=['<identifier>', '<quotedName>'])
+
+    def test_complete_in_list_service_levels(self):
+
+        self.trycompletions("LIST ALL ",
+                            choices={'ON', 'NORECURSIVE', 'OF', 'ATTACHED', ';', 'SERVICE_LEVELS', 'PERMISSIONS'})
+
+        self.trycompletions("LIST ALL SERVICE_LEVELS ",
+                            choices={';'})
+
+        self.trycompletions("LIST ALL ATTACHED ",
+                            immediate='SERVICE_LEVELS ;')
+
+        self.trycompletions("LIST ATTACHED  ",
+                            immediate='SERVICE_LEVEL OF ')
+
+        self.trycompletions("LIST SERVICE_LEVEL  ",
+                            choices={'<quotedName>', '<identifier>'})
