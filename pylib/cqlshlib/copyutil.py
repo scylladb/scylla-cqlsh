@@ -160,6 +160,11 @@ class SendingChannels(object):
         self.pipes = [OneWayPipe() for _ in range(num_channels)]
         self.channels = [SendingChannel(p) for p in self.pipes]
         self.num_channels = num_channels
+        self._readers = [p.reader for p in self.pipes]
+
+    def release_readers(self):
+        for reader in self._readers:
+            reader.close()
 
     def close(self):
         for ch in self.channels:
@@ -177,11 +182,16 @@ class ReceivingChannels(object):
         self.pipes = [OneWayPipe() for _ in range(num_channels)]
         self.channels = [ReceivingChannel(p) for p in self.pipes]
         self._readers = [p.reader for p in self.pipes]
+        self._writers = [p.writer for p in self.pipes]
         self._rlocks = [p.rlock for p in self.pipes]
         self._rlocks_by_readers = dict([(p.reader, p.rlock) for p in self.pipes])
         self.num_channels = num_channels
 
         self.recv = self.recv_select if IS_LINUX else self.recv_polling
+
+    def release_writers(self):
+        for writer in self._writers:
+            writer.close()
 
     def recv_select(self, timeout):
         """
@@ -465,7 +475,8 @@ class CopyTask(object):
         for i, process in enumerate(self.processes):
             process.start()
             self.trace_process(process.pid)
-
+        self.inmsg.release_writers()
+        self.outmsg.release_readers()
         self.trace_process(self.get_pid())
 
     def stop_processes(self):
