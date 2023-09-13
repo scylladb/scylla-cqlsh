@@ -36,8 +36,8 @@ class UnexpectedTableStructure(UserWarning):
 
 
 SYSTEM_KEYSPACES = ('system', 'system_schema', 'system_traces', 'system_auth', 'system_distributed', 'system_views',
-                    'system_virtual_schema', 'system_distributed_everywhere')
-NONALTERBALE_KEYSPACES = ('system', 'system_schema', 'system_views', 'system_virtual_schema', 'system_distributed_everywhere')
+                    'system_virtual_schema', 'system_distributed_everywhere', 'system_replicated_keys')
+NONALTERBALE_KEYSPACES = ('system', 'system_schema', 'system_views', 'system_virtual_schema', 'system_distributed_everywhere', 'system_replicated_keys')
 
 
 class Cql3ParsingRuleSet(CqlParsingRuleSet):
