@@ -69,6 +69,28 @@ jobs:
           pip install -r ./pylib/requirements.txt
           pytest ./cqlshlib/test
 
+  integration_test_scylla_enterprise:
+    name: Integration Tests (Scylla Enterprise)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Start Scylla
+        run: |
+          export DOCKER_ID=$(docker run -d scylladb/scylla-enterprise:latest --cluster-name test )
+          export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+          while ! nc -z ${CQL_TEST_HOST} 9042; do   
+            sleep 0.1 # wait for 1/10 of the second before check again
+          done
+
+          echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
+
+      - name: pytest
+        run: |
+          pip install -r ./pylib/requirements.txt
+          pytest ./cqlshlib/test
+
   integration_test_scylla_cloud_bundle:
     name: Integration Tests (Scylla Cloud Bundle)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
