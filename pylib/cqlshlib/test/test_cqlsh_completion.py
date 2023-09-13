@@ -21,8 +21,12 @@
 import locale
 import os
 import re
+
+from cassandra import InvalidRequest
+from packaging.version import Version
+
 from .basecase import BaseTestCase
-from .cassconnect import create_db, remove_db, testrun_cqlsh
+from .cassconnect import create_db, remove_db, testrun_cqlsh, get_cassandra_connection
 from .run_cqlsh import TimeoutError
 from cqlshlib.cql3handling import CqlRuleSet
 
@@ -48,6 +52,14 @@ class CqlshCompletionCase(BaseTestCase):
             output = c.cmd_and_response("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
             cls.is_scylla = '1 rows' in output
 
+        with get_cassandra_connection().connect() as session:
+            try:
+                result = session.execute("SELECT version FROM system.versions WHERE key = 'local' LIMIT 1")
+                cls.scylla_version = Version(result.one().version.rsplit('.', 2)[0])
+                cls.is_scylla_enterprise = cls.scylla_version > Version('2018.1')
+            except InvalidRequest:
+                cls.is_scylla_enterprise = False
+
     @classmethod
     def tearDownClass(cls):
         remove_db()
@@ -62,6 +74,18 @@ class CqlshCompletionCase(BaseTestCase):
 
     def tearDown(self):
         self.cqlsh_runner.__exit__(None, None, None)
+
+    def _system_keyspaces(self):
+        tables = []
+
+        if self.is_scylla:
+            tables += ['system_distributed_everywhere.']
+            if  self.is_scylla_enterprise:
+                tables += ['system_replicated_keys.']
+        else:
+            tables += ['system_views.', 'system_virtual_schema.']
+
+        return tables
 
     def _get_completions(self, inputstring, split_completed_lines=True):
         """
@@ -927,9 +951,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                      'utf8_with_special_chars',
                                                      'system_traces.', 'songs',
                                                      'system_schema.', 'system_distributed.',
-                                                     self.cqlsh.keyspace + '.'] +
-                                                     (['system_distributed_everywhere.'] if self.is_scylla else
-                                                      ['system_views.', 'system_virtual_schema.']))
+                                                     self.cqlsh.keyspace + '.'] + self._system_keyspaces()
+                                                     )
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD ', choices=['<new_column_name>', 'IF'])
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
         self.trycompletions('ALTER TABLE new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
@@ -943,8 +966,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                     'tags', 'system_traces.', 'system_distributed.',
                                                     'phone_number', 'band_info_type', 'address', 'system.', 'system_schema.',
                                                     'system_auth.', self.cqlsh.keyspace + '.'
-                                                    ] + (['system_distributed_everywhere.'] if self.is_scylla else
-                                                        ['system_views.', 'system_virtual_schema.']))
+                                                    ] + self._system_keyspaces())
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD ', choices=['<new_field_name>', 'IF'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD IF NOT EXISTS ', choices=['<new_field_name>'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type RENAME ', choices=['IF', '<quotedName>', '<identifier>'])
