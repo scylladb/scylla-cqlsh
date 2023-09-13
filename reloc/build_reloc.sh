@@ -7,12 +7,14 @@ print_usage() {
     echo "  --clean clean build directory"
     echo "  --nodeps    skip installing dependencies"
     echo "  --version V  product-version-release string (overriding SCYLLA-VERSION-GEN)"
+    echo "  --verbose more chatty. I am quiet by default"
     exit 1
 }
 
 CLEAN=
 NODEPS=
 VERSION_OVERRIDE=
+VERBOSE=false
 while [ $# -gt 0 ]; do
     case "$1" in
         "--clean")
@@ -26,6 +28,10 @@ while [ $# -gt 0 ]; do
         "--version")
             VERSION_OVERRIDE="$2"
             shift 2
+            ;;
+        "--verbose")
+            VERBOSE=true
+            shift 1
             ;;
             *)
             print_usage
@@ -66,10 +72,16 @@ fi
 
 printf "version=%s" $VERSION > build.properties
 
+if $VERBOSE; then
+    TAR_EXTRA_OPTS="--verbose"
+else
+    PIP_EXTRA_OPTS="--quiet"
+    ZIP_EXTRA_OPTS="--quiet"
+fi
 
-python3 -m pip install build==0.8.0 wheel==0.37.1 -t ./build/cqlsh_build
+python3 -m pip install ${PIP_EXTRA_OPTS} build==0.8.0 wheel==0.37.1 -t ./build/cqlsh_build
 PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m build -s
-PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m pip download --constraint ./requirements.txt --no-binary :all: . --no-build-isolation -d ./build/pypi_packages
+PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m pip download ${PIP_EXTRA_OPTS} --constraint ./requirements.txt --no-binary :all: . --no-build-isolation -d ./build/pypi_packages
 
 for package in $(ls ./build/pypi_packages/*.tar.gz)
 do
@@ -77,10 +89,10 @@ do
    TMP_PACKAGE_DIR="./build/${PACKAGE_NAME}"
    ZIP_PACKAGE=$(pwd)"/lib/${PACKAGE_NAME}.zip"
    mkdir -p $TMP_PACKAGE_DIR
-   tar xvzf ${package} --strip-components 1 -C $TMP_PACKAGE_DIR
+   tar xzf ${package} --strip-components 1 ${TAR_EXTRA_OPTS} -C $TMP_PACKAGE_DIR
    cd ${TMP_PACKAGE_DIR}
       mkdir -p $(dirname ${ZIP_PACKAGE})
-      zip -r ${ZIP_PACKAGE} *
+      zip -r ${ZIP_EXTRA_OPTS} ${ZIP_PACKAGE} *
    cd -
 done
 
