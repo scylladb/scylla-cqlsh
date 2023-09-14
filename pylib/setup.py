@@ -30,7 +30,8 @@ def get_extensions():
         extensions = [Extension(name='copyutil',
                                 sources=["cqlshlib/copyutil.py"],
                                 define_macros=[("CYTHON_LIMITED_API", "1")])]
-        return cythonize(extensions)
+        return cythonize(extensions,
+                         compiler_directives={'language_level': '3str'})
     except ImportError:
         warnings.warn("installing cython could speed things up for you; `pip install cython`")
 
