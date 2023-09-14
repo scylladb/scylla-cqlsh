@@ -22,13 +22,14 @@ from distutils.core import setup, Extension
 
 
 def get_extensions():
-    if "--no-compile" not in sys.argv:
+    if "--no-compile" in sys.argv:
+        return []
+    else:
         try:
             from Cython.Build import cythonize
             return cythonize(Extension(name='copyutil', sources=["cqlshlib/copyutil.py"], define_macros=[("CYTHON_LIMITED_API", "1")]))
         except ImportError:
             warnings.warn("installing cython could speed things up for you; `pip install cython`")
-    return []
 
 
 setup(
