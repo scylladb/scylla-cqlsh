@@ -79,7 +79,7 @@ else
     ZIP_EXTRA_OPTS="--quiet"
 fi
 
-python3 -m pip install ${PIP_EXTRA_OPTS} build==0.8.0 wheel==0.37.1 -t ./build/cqlsh_build
+python3 -m pip install ${PIP_EXTRA_OPTS} build==0.10.0 wheel==0.37.1 -t ./build/cqlsh_build
 PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m build -s
 PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m pip download ${PIP_EXTRA_OPTS} --constraint ./requirements.txt --no-binary :all: . --no-build-isolation -d ./build/pypi_packages
 
