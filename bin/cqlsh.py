@@ -152,7 +152,7 @@ if os.path.isdir(cqlshlibdir):
 from cqlshlib import cql3handling, pylexotron, sslhandling, cqlshhandling, authproviderhandling
 from cqlshlib.copyutil import ExportTask, ImportTask
 from cqlshlib.displaying import (ANSI_RESET, BLUE, COLUMN_NAME_COLORS, CYAN,
-                                 RED, WHITE, FormattedValue, colorme)
+                                 RED, YELLOW, WHITE, FormattedValue, colorme)
 from cqlshlib.formatting import (DEFAULT_DATE_FORMAT, DEFAULT_NANOTIME_FORMAT,
                                  DEFAULT_TIMESTAMP_FORMAT, CqlType, DateTimeFormat,
                                  format_by_type)
@@ -1110,8 +1110,8 @@ class Shell(cmd.Cmd):
             try:
                 self.conn.refresh_schema_metadata(5)  # will throw exception if there is a schema mismatch
             except Exception:
-                self.printerr("Warning: schema version mismatch detected; check the schema versions of your "
-                              "nodes in system.local and system.peers.")
+                self.printwarn("Warning: schema version mismatch detected; check the schema versions of your "
+                               "nodes in system.local and system.peers.")
                 self.conn.refresh_schema_metadata(-1)
 
         if result is None:
@@ -2284,6 +2284,13 @@ class Shell(cmd.Cmd):
 
     def printerr(self, text, color=RED, newline=True, shownum=None):
         self.statement_error = True
+        if shownum is None:
+            shownum = self.show_line_nums
+        if shownum:
+            text = '%s:%d:%s' % (self.stdin.name, self.lineno, text)
+        self.writeresult(text, color, newline=newline, out=sys.stderr)
+
+    def printwarn(self, text, color=YELLOW, newline=True, shownum=None):
         if shownum is None:
             shownum = self.show_line_nums
         if shownum:
