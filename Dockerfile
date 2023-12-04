@@ -1,7 +1,7 @@
 FROM python:3.11-slim-bullseye AS compile-image
 
 WORKDIR /usr/src/app
-RUN apt-get update && apt-get -y install git gcc
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y install --no-install-recommends git gcc libc6-dev
 
 COPY . .
 RUN pip install --user .
