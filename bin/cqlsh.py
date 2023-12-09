@@ -212,7 +212,7 @@ parser.add_option('--cqlversion', default=None,
                        'by default the highest version supported by the server will be used.'
                        ' Examples: "3.0.3", "3.1.0"')
 parser.add_option("--protocol-version", type="int", default=None,
-                  help='Specify a specific protcol version otherwise the client will default and downgrade as necessary')
+                  help='Specify a specific protocol version otherwise the client will default and downgrade as necessary')
 
 parser.add_option("-e", "--execute", help='Execute the statement and quit.')
 parser.add_option("--connect-timeout", default=DEFAULT_CONNECT_TIMEOUT_SECONDS, dest='connect_timeout',
