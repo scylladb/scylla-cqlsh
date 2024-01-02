@@ -47,7 +47,11 @@ if os.path.exists('build/debian/debian'):
 shutil.copytree('dist/debian/debian', 'build/debian/debian')
 
 s = DebianFilesTemplate(changelog_template)
-changelog_applied = s.substitute(product=product, version=version, release=release, revision='1', codename='stable')
+changelog_applied = s.substitute(product=product,
+                                 version=version,
+                                 release=release,
+                                 revision='1',
+                                 codename='stable')
 
 s = DebianFilesTemplate(control_template)
 control_applied = s.substitute(product=product)
