@@ -135,6 +135,7 @@ except ImportError as e:
 
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster, EXEC_PROFILE_DEFAULT, ExecutionProfile
+from cassandra.connection import UnixSocketEndPoint
 from cassandra.cqltypes import cql_typename
 from cassandra.marshal import int64_unpack
 from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata, protect_name, protect_names, protect_value)
@@ -485,10 +486,14 @@ class Shell(cmd.Cmd):
             }
 
             if cloudconf is None:
-                kwargs['contact_points'] = (self.hostname,)
+                if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+                    kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
+                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+                else: 
+                    kwargs['contact_points'] = (self.hostname,)
+                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
                 kwargs['port'] = self.port
                 kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
-                profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
             else:
                 assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
                 kwargs['scylla_cloud'] = cloudconf
@@ -2126,7 +2131,10 @@ class Shell(cmd.Cmd):
             kwargs['contact_points'] = (self.hostname,)
             kwargs['port'] = self.port
             kwargs['ssl_context'] = self.conn.ssl_context
-            kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
+            if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+            else: 
+                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
         else:
             kwargs['scylla_cloud'] = self.cloudconf
 
