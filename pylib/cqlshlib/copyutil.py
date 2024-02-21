@@ -86,6 +86,10 @@ def printmsg(msg, eol='\n'):
     sys.stdout.flush()
 
 
+def noop(*arg, **kwargs):
+    pass
+
+
 class OneWayPipe(object):
     """
     A one way pipe protected by two process level locks, one for reading and one for writing.
@@ -259,7 +263,7 @@ class CopyTask(object):
             DEBUG = True
 
         # do not display messages when exporting to STDOUT unless --debug is set
-        self.printmsg = printmsg if self.fname is not None or direction == 'from' or DEBUG else None
+        self.printmsg = printmsg if self.fname is not None or direction == 'from' or DEBUG else noop
         self.options = self.parse_options(opts, direction)
 
         self.num_processes = self.options.copy['numprocesses']

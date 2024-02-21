@@ -28,6 +28,9 @@ from unittest.mock import Mock
 from cqlshlib.copyutil import ExportTask
 
 
+Default = object()
+
+
 class CopyTaskTest(unittest.TestCase):
 
     def setUp(self):
@@ -60,10 +63,11 @@ class CopyTaskTest(unittest.TestCase):
 
 class TestExportTask(CopyTaskTest):
 
-    def _test_get_ranges_murmur3_base(self, opts, expected_ranges):
+    def _test_get_ranges_murmur3_base(self, opts, expected_ranges, fname=Default):
         """
         Set up a mock shell with a simple token map to test the ExportTask get_ranges function.
         """
+        fname = self.fname if fname is Default else fname
         shell = self.mock_shell()
         shell.conn.metadata.partitioner = 'Murmur3Partitioner'
         # token range for a cluster of 4 nodes with replication factor 3
@@ -77,7 +81,7 @@ class TestExportTask(CopyTaskTest):
         overridden_opts = dict(self.opts)
         for k, v in opts.items():
             overridden_opts[k] = v
-        export_task = ExportTask(shell, self.ks, self.table, self.columns, self.fname, overridden_opts, self.protocol_version, self.config_file)
+        export_task = ExportTask(shell, self.ks, self.table, self.columns, fname, overridden_opts, self.protocol_version, self.config_file)
         assert export_task.get_ranges() == expected_ranges
         export_task.close()
 
@@ -114,3 +118,6 @@ class TestExportTask(CopyTaskTest):
             (None, MIN_LONG + 1): {'hosts': ('10.0.0.2', '10.0.0.3', '10.0.0.4'), 'attempts': 0, 'rows': 0, 'workerno': -1}
         }
         self._test_get_ranges_murmur3_base({'endtoken': MIN_LONG + 1}, expected_ranges)
+
+    def test_exporting_to_std(self):
+        self._test_get_ranges_murmur3_base({'begintoken': MIN_LONG - 1}, {}, fname=None)
