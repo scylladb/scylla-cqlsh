@@ -57,6 +57,16 @@ class TestCqlshOutput(BaseTestCase):
                 cls.is_scylla = len(output.all()) == 1
             except InvalidRequest:
                 cls.is_scylla = False
+            try:
+                result = curs.execute("SELECT version FROM system.versions WHERE key = 'local' LIMIT 1")
+                cls.scylla_version = Version(result.one().version.rsplit('.', 2)[0])
+                cls.is_scylla_enterprise = cls.scylla_version > Version('2018.1')
+            except InvalidRequest:
+                cls.is_scylla_enterprise = False
+
+    @property
+    def default_compaction_strategy(self):
+        return 'IncrementalCompactionStrategy' if self.is_scylla_enterprise else 'SizeTieredCompactionStrategy'
 
     def setUp(self):
         env = os.environ.copy()
@@ -684,7 +694,7 @@ class TestCqlshOutput(BaseTestCase):
                 AND read_repair = 'BLOCKING'
                 AND speculative_retry = '99p';""" % quote_name(get_keyspace()))
 
-        scylla_table_desc = dedent("""
+        scylla_table_desc = dedent(f"""
             CREATE TABLE %s.has_all_types (
                 num int PRIMARY KEY,
                 asciicol ascii,
@@ -703,10 +713,10 @@ class TestCqlshOutput(BaseTestCase):
                 varcharcol text,
                 varintcol varint
             ) WITH bloom_filter_fp_chance = 0.01
-                AND caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
+                AND caching = {{'keys': 'ALL', 'rows_per_partition': 'ALL'}}
                 AND comment = ''
-                AND compaction = {'class': 'SizeTieredCompactionStrategy'}
-                AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+                AND compaction = {{'class': '{self.default_compaction_strategy}'}}
+                AND compression = {{'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}}
                 AND crc_check_chance = 1.0
                 AND dclocal_read_repair_chance = 0.0
                 AND default_time_to_live = 0
@@ -1001,7 +1011,7 @@ class TestCqlshOutput(BaseTestCase):
         ) WITH bloom_filter_fp_chance = 0.01
             AND caching = {{'keys': 'ALL', 'rows_per_partition': 'ALL'}}
             AND comment = ''
-            AND compaction = {{'class': 'SizeTieredCompactionStrategy'}}
+            AND compaction = {{'class': '{self.default_compaction_strategy}'}}
             AND compression = {{'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}}
             AND crc_check_chance = 1.0
             AND dclocal_read_repair_chance = 0.0
