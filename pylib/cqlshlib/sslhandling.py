@@ -58,6 +58,11 @@ def ssl_settings(host, config_file, env=os.environ):
         ssl_validate = get_option('ssl', 'validate')
     ssl_validate = ssl_validate is None or ssl_validate.lower() != 'false'
 
+    ssl_check_hostname = env.get('SSL_check_hostname')
+    if ssl_check_hostname is None:
+        ssl_check_hostname = get_option('ssl', 'check_hostname')
+    ssl_check_hostname = ssl_check_hostname is None or ssl_check_hostname.lower() != 'false'
+
     ssl_version_str = env.get('SSL_VERSION')
     if ssl_version_str is None:
         ssl_version_str = get_option('ssl', 'version')
@@ -85,7 +90,7 @@ def ssl_settings(host, config_file, env=os.environ):
         usercert = os.path.expanduser(usercert)
 
     ssl_context = ssl.SSLContext(ssl_version)
-    ssl_context.check_hostname = ssl_validate
+    ssl_context.check_hostname = ssl_check_hostname
     ssl_context.load_cert_chain(certfile=usercert,
                                 keyfile=userkey)
 
