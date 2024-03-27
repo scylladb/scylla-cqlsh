@@ -494,6 +494,8 @@ class Shell(cmd.Cmd):
                     profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
                 kwargs['port'] = self.port
                 kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
+                # workaround until driver would know not to lose the DNS names for `server_hostname`
+                kwargs['ssl_options'] = {'server_hostname': self.hostname} if ssl else None
             else:
                 assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
                 kwargs['scylla_cloud'] = cloudconf
@@ -2131,6 +2133,7 @@ class Shell(cmd.Cmd):
             kwargs['contact_points'] = (self.hostname,)
             kwargs['port'] = self.port
             kwargs['ssl_context'] = self.conn.ssl_context
+            kwargs['ssl_options'] = self.conn.ssl_options
             if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
                 kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
             else: 
