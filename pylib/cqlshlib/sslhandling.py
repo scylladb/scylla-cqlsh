@@ -58,11 +58,16 @@ def ssl_settings(host, config_file, env=os.environ):
         ssl_validate = get_option('ssl', 'validate')
     ssl_validate = ssl_validate is None or ssl_validate.lower() != 'false'
 
-    ssl_check_hostname = env.get('SSL_check_hostname')
+    ssl_check_hostname = env.get('SSL_CHECK_HOSTNAME')
     if ssl_check_hostname is None:
         ssl_check_hostname = get_option('ssl', 'check_hostname')
-    ssl_check_hostname = ssl_check_hostname is None or ssl_check_hostname.lower() != 'false'
+    ssl_check_hostname = ssl_check_hostname is not None or ssl_check_hostname.lower() != 'false'
 
+    if ssl_check_hostname and not ssl_validate:
+        sys.exit("SSL certificate hostname checking "
+                 "(`check_hostname` in the [ssl] section) must be turned off "
+                 "if certificate `validate` is turned off.")
+        
     ssl_version_str = env.get('SSL_VERSION')
     if ssl_version_str is None:
         ssl_version_str = get_option('ssl', 'version')
