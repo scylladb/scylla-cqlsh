@@ -91,8 +91,11 @@ def ssl_settings(host, config_file, env=os.environ):
 
     ssl_context = ssl.SSLContext(ssl_version)
     ssl_context.check_hostname = ssl_check_hostname
-    ssl_context.load_cert_chain(certfile=usercert,
-                                keyfile=userkey)
+    if usercert and userkey:
+        ssl_context.load_cert_chain(certfile=usercert,
+                                    keyfile=userkey)
+    if (usercert and not userkey) or (userkey and not usercert):
+        print("Warning: userkey and usercert from [ssl] section, should be both configured, otherwise won't be used")
 
     ssl_context.verify_mode = ssl.CERT_REQUIRED if ssl_validate else ssl.CERT_NONE
     if ssl_certfile:
