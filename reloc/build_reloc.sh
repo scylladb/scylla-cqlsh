@@ -81,7 +81,7 @@ fi
 
 python3 -m pip install ${PIP_EXTRA_OPTS} build==0.10.0 wheel==0.37.1 -t ./build/cqlsh_build
 PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m build -s
-PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m pip download ${PIP_EXTRA_OPTS} --constraint ./requirements.txt --no-binary :all: . --no-build-isolation -d ./build/pypi_packages
+PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m pip download ${PIP_EXTRA_OPTS} --constraint ./requirements.txt --no-binary :all: --only-binary cython . -d ./build/pypi_packages
 
 for package in $(ls ./build/pypi_packages/*.tar.gz)
 do
