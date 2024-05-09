@@ -48,11 +48,6 @@ UTF8 = 'utf-8'
 
 description = "CQL Shell for Apache Cassandra"
 
-try:
-    from cqlshlib._version import __version__ as version
-except ImportError:
-    version = "6.2.0"
-
 readline = None
 try:
     # check if tty first, cause readline doesn't check, and only cares
@@ -161,6 +156,10 @@ from cqlshlib.tracing import print_trace, print_trace_session
 from cqlshlib.util import get_file_encoding_bomsize
 from cqlshlib.util import is_file_secure, trim_if_present
 
+try:
+    from cqlshlib._version import __version__ as version
+except ImportError:
+    version = "0.0.0"
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 9042
