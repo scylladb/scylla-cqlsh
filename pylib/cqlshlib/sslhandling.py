@@ -61,7 +61,7 @@ def ssl_settings(host, config_file, env=os.environ):
     ssl_check_hostname = env.get('SSL_CHECK_HOSTNAME')
     if ssl_check_hostname is None:
         ssl_check_hostname = get_option('ssl', 'check_hostname')
-    ssl_check_hostname = ssl_check_hostname is not None or ssl_check_hostname.lower() != 'false'
+    ssl_check_hostname = ssl_check_hostname is not None and ssl_check_hostname.lower() != 'false'
 
     if ssl_check_hostname and not ssl_validate:
         sys.exit("SSL certificate hostname checking "
