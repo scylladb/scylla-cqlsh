@@ -48,11 +48,6 @@ UTF8 = 'utf-8'
 
 description = "CQL Shell for Apache Cassandra"
 
-try:
-    from cqlshlib._version import __version__ as version
-except ImportError:
-    version = "6.2.0"
-
 readline = None
 try:
     # check if tty first, cause readline doesn't check, and only cares
@@ -135,6 +130,7 @@ except ImportError as e:
 
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster, EXEC_PROFILE_DEFAULT, ExecutionProfile
+from cassandra.connection import UnixSocketEndPoint
 from cassandra.cqltypes import cql_typename
 from cassandra.marshal import int64_unpack
 from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata, protect_name, protect_names, protect_value)
@@ -152,7 +148,7 @@ if os.path.isdir(cqlshlibdir):
 from cqlshlib import cql3handling, pylexotron, sslhandling, cqlshhandling, authproviderhandling
 from cqlshlib.copyutil import ExportTask, ImportTask
 from cqlshlib.displaying import (ANSI_RESET, BLUE, COLUMN_NAME_COLORS, CYAN,
-                                 RED, WHITE, FormattedValue, colorme)
+                                 RED, YELLOW, WHITE, FormattedValue, colorme)
 from cqlshlib.formatting import (DEFAULT_DATE_FORMAT, DEFAULT_NANOTIME_FORMAT,
                                  DEFAULT_TIMESTAMP_FORMAT, CqlType, DateTimeFormat,
                                  format_by_type)
@@ -160,6 +156,10 @@ from cqlshlib.tracing import print_trace, print_trace_session
 from cqlshlib.util import get_file_encoding_bomsize
 from cqlshlib.util import is_file_secure, trim_if_present
 
+try:
+    from cqlshlib._version import __version__ as version
+except ImportError:
+    version = "0.0.0"
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 9042
@@ -212,7 +212,7 @@ parser.add_option('--cqlversion', default=None,
                        'by default the highest version supported by the server will be used.'
                        ' Examples: "3.0.3", "3.1.0"')
 parser.add_option("--protocol-version", type="int", default=None,
-                  help='Specify a specific protcol version otherwise the client will default and downgrade as necessary')
+                  help='Specify a specific protocol version otherwise the client will default and downgrade as necessary')
 
 parser.add_option("-e", "--execute", help='Execute the statement and quit.')
 parser.add_option("--connect-timeout", default=DEFAULT_CONNECT_TIMEOUT_SECONDS, dest='connect_timeout',
@@ -485,10 +485,16 @@ class Shell(cmd.Cmd):
             }
 
             if cloudconf is None:
-                kwargs['contact_points'] = (self.hostname,)
+                if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+                    kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
+                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+                else: 
+                    kwargs['contact_points'] = (self.hostname,)
+                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
                 kwargs['port'] = self.port
                 kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
-                profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
+                # workaround until driver would know not to lose the DNS names for `server_hostname`
+                kwargs['ssl_options'] = {'server_hostname': self.hostname} if ssl else None
             else:
                 assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
                 kwargs['scylla_cloud'] = cloudconf
@@ -1110,8 +1116,8 @@ class Shell(cmd.Cmd):
             try:
                 self.conn.refresh_schema_metadata(5)  # will throw exception if there is a schema mismatch
             except Exception:
-                self.printerr("Warning: schema version mismatch detected; check the schema versions of your "
-                              "nodes in system.local and system.peers.")
+                self.printwarn("Warning: schema version mismatch detected; check the schema versions of your "
+                               "nodes in system.local and system.peers.")
                 self.conn.refresh_schema_metadata(-1)
 
         if result is None:
@@ -2126,7 +2132,11 @@ class Shell(cmd.Cmd):
             kwargs['contact_points'] = (self.hostname,)
             kwargs['port'] = self.port
             kwargs['ssl_context'] = self.conn.ssl_context
-            kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
+            kwargs['ssl_options'] = self.conn.ssl_options
+            if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+            else: 
+                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
         else:
             kwargs['scylla_cloud'] = self.cloudconf
 
@@ -2290,6 +2300,13 @@ class Shell(cmd.Cmd):
             text = '%s:%d:%s' % (self.stdin.name, self.lineno, text)
         self.writeresult(text, color, newline=newline, out=sys.stderr)
 
+    def printwarn(self, text, color=YELLOW, newline=True, shownum=None):
+        if shownum is None:
+            shownum = self.show_line_nums
+        if shownum:
+            text = '%s:%d:%s' % (self.stdin.name, self.lineno, text)
+        self.writeresult(text, color, newline=newline, out=sys.stderr)
+
     def stop_coverage(self):
         if self.coverage and self.cov is not None:
             self.cov.stop()
@@ -2406,7 +2423,8 @@ def read_options(cmdlineargs, environment):
             print("\nWarning: Password is found in an insecure cqlshrc file. The file is owned or readable by other users on the system.",
                   end='', file=sys.stderr)
         print("\nNotice: Credentials in the cqlshrc file is deprecated and will be ignored in the future."
-              "\nPlease use a credentials file to specify the username and password.\n", file=sys.stderr)
+              "\nPlease use a credentials file to specify the username and password.\n"
+              "\nTo use basic authentication, place the username and password in the [PlainTextAuthProvider] section of the credentials file.\n", file=sys.stderr)
 
     optvalues = optparse.Values()
 
@@ -2478,7 +2496,7 @@ def read_options(cmdlineargs, environment):
         credentials.read(options.credentials)
 
         # use the username from credentials file but fallback to cqlshrc if username is absent from the command line parameters
-        options.username = username_from_cqlshrc
+        options.username = option_with_default(credentials.get, 'plain_text_auth', 'username', username_from_cqlshrc)
 
     if not options.password:
         rawcredentials = configparser.RawConfigParser()
@@ -2486,7 +2504,6 @@ def read_options(cmdlineargs, environment):
 
         # handling password in the same way as username, priority cli > credentials > cqlshrc
         options.password = option_with_default(rawcredentials.get, 'plain_text_auth', 'password', password_from_cqlshrc)
-        options.password = password_from_cqlshrc
     elif not options.insecure_password_without_warning:
         print("\nWarning: Using a password on the command line interface can be insecure."
               "\nRecommendation: use the credentials file to securely provide the password.\n", file=sys.stderr)

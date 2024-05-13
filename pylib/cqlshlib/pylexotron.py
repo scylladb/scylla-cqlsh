@@ -384,7 +384,7 @@ class ParsingRuleSet:
     def parse_rules(cls, rulestr):
         tokens, unmatched = cls.RuleSpecScanner.scan(rulestr)
         if unmatched:
-            raise LexingError.from_text(rulestr, unmatched, msg="Syntax rules are unparseable")
+            raise LexingError.from_text(rulestr, unmatched, msg="Syntax rules are unparsable")
         rules = {}
         terminals = []
         tokeniter = iter(tokens)

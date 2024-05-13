@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import string
 import os
 import shutil
@@ -47,7 +48,13 @@ if os.path.exists('build/debian/debian'):
 shutil.copytree('dist/debian/debian', 'build/debian/debian')
 
 s = DebianFilesTemplate(changelog_template)
-changelog_applied = s.substitute(product=product, version=version, release=release, revision='1', codename='stable')
+now = datetime.datetime.now(tz=datetime.timezone.utc)
+changelog_applied = s.substitute(product=product,
+                                 version=version,
+                                 release=release,
+                                 revision='1',
+                                 codename='stable',
+                                 timestamp=now.strftime("%a, %d %b %Y %H:%M:%S %z"))
 
 s = DebianFilesTemplate(control_template)
 control_applied = s.substitute(product=product)
