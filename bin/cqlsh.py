@@ -478,7 +478,7 @@ class Shell(cmd.Cmd):
             if protocol_version is not None:
                 kwargs['protocol_version'] = protocol_version
 
-            profiles = {
+            self.profiles = {
                 EXEC_PROFILE_DEFAULT: ExecutionProfile(consistency_level=cassandra.ConsistencyLevel.ONE,
                                                        request_timeout=request_timeout,
                                                        row_factory=ordered_dict_factory)
@@ -487,10 +487,10 @@ class Shell(cmd.Cmd):
             if cloudconf is None:
                 if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
                     kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
-                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
                 else: 
                     kwargs['contact_points'] = (self.hostname,)
-                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
+                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
                 kwargs['port'] = self.port
                 kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
                 # workaround until driver would know not to lose the DNS names for `server_hostname`
@@ -503,7 +503,7 @@ class Shell(cmd.Cmd):
                                 auth_provider=self.auth_provider,
                                 control_connection_timeout=connect_timeout,
                                 connect_timeout=connect_timeout,
-                                execution_profiles=profiles,
+                                execution_profiles=self.profiles,
                                 **kwargs)
         self.owns_connection = not use_conn
 
@@ -2140,10 +2140,6 @@ class Shell(cmd.Cmd):
             kwargs['port'] = self.port
             kwargs['ssl_context'] = self.conn.ssl_context
             kwargs['ssl_options'] = self.conn.ssl_options
-            if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
-                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
-            else: 
-                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
         else:
             kwargs['scylla_cloud'] = self.cloudconf
 
@@ -2152,6 +2148,7 @@ class Shell(cmd.Cmd):
                        auth_provider=auth_provider,
                        control_connection_timeout=self.conn.connect_timeout,
                        connect_timeout=self.conn.connect_timeout,
+                       execution_profiles=self.profiles,
                        **kwargs)
 
         if self.current_keyspace:
@@ -2160,9 +2157,6 @@ class Shell(cmd.Cmd):
             session = conn.connect()
 
         # Copy session properties
-        session.default_timeout = self.session.default_timeout
-        session.row_factory = self.session.row_factory
-        session.default_consistency_level = self.session.default_consistency_level
         session.max_trace_wait = self.session.max_trace_wait
 
         # Update after we've connected in case we fail to authenticate
