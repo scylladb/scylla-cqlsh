@@ -6,6 +6,9 @@ build.properties
 build/**                                                                                                                                                                         
 dist/*.tar.gz
 
+# generated code
+bin/cqlsh
+
 pylib/cqlshlib/_version.py
 pylib/cqlshlib/copyutil.c
 pylib/cqlshlib/__pycache__/**

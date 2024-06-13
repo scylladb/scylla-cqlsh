@@ -19,12 +19,25 @@
 import sys
 import warnings
 from distutils.core import setup, Extension
+from setuptools.command.build_ext import build_ext
+
+
+class BuildExtCommand(build_ext):
+    user_options = build_ext.user_options + [
+        ('disable-copyutil=', None, None),  # a 'flag' option
+    ]
+
+    def initialize_options(self):
+        self.disable_copyutil = None
+        super().initialize_options()
+
+    def finalize_options(self, *args, **kwargs):
+        super().finalize_options(*args, **kwargs)
+        if not self.disable_copyutil:
+            self.extensions = []
 
 
 def get_extensions():
-    if "--no-compile" in sys.argv:
-        return []
-
     try:
         from Cython.Build import cythonize
         extensions = [Extension(name='copyutil',
@@ -49,5 +62,8 @@ setup(
         "Topic :: Database :: Front-Ends",
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
-    ]
+    ],
+    cmdclass={
+        'build_ext': BuildExtCommand,
+    }
 )
