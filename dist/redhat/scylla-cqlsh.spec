@@ -8,7 +8,6 @@ Obsoletes:      %{product}-tools < 5.2
 License:        Apache
 URL:            http://www.scylladb.com/
 Source0:        %{reloc_pkg}
-BuildArch:      noarch
 Requires:       python3
 AutoReqProv:    no
 Conflicts:      cassandra
@@ -39,7 +38,6 @@ rm -rf $RPM_BUILD_ROOT
 /opt/scylladb/share/cassandra/bin/*
 /opt/scylladb/share/cassandra/libexec/*
 /opt/scylladb/share/cassandra/pylib/*
-/opt/scylladb/share/cassandra/lib/*
 
 
 %changelog
