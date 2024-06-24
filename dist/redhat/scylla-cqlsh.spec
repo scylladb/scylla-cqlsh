@@ -12,12 +12,15 @@ Requires:       python3
 AutoReqProv:    no
 Conflicts:      cassandra
 
+%global debug_package %{nil}
+
 %global __brp_python_bytecompile %{nil}
 %global __brp_mangle_shebangs %{nil}
 %global __brp_ldconfig %{nil}
 %global __brp_strip %{nil}
 %global __brp_strip_comment_note %{nil}
 %global __brp_strip_static_archive %{nil}
+
 
 %description
 cqlsh is a Python-based command-line client for running CQL commands on a cassandra cluster.
