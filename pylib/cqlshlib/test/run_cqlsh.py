@@ -114,6 +114,7 @@ def noop(*a):
 class ProcRunner:
     def __init__(self, path, tty=True, env=None, args=()):
         self.exe_path = path
+        self.python_exe = sys.executable
         self.args = args
         self.tty = tty
         if env is None:
@@ -131,7 +132,7 @@ class ProcRunner:
         if self.tty:
             masterfd, slavefd = pty.openpty()
             preexec = (lambda: set_controlling_pty(masterfd, slavefd))
-            self.proc = subprocess.Popen((self.exe_path,) + tuple(self.args),
+            self.proc = subprocess.Popen((self.python_exe, self.exe_path,) + tuple(self.args),
                                          env=self.env, preexec_fn=preexec,
                                          stdin=stdin, stdout=stdout, stderr=stderr,
                                          close_fds=False)
@@ -231,7 +232,7 @@ class CqlshRunner(ProcRunner):
     def __init__(self, path=None, host=None, port=None, keyspace=None, cqlver=None,
                  args=(), prompt=DEFAULT_CQLSH_PROMPT, env=None, tty=True, **kwargs):
         if path is None:
-            path = join(basecase.cqlsh_dir, 'cqlsh')
+            path = join(basecase.cqlsh_dir, 'cqlsh.py')
         if host is None:
             host = basecase.TEST_HOST
         if port is None:
