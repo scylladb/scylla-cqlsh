@@ -22,10 +22,10 @@
 #
 
 import argparse
-import io
-import os
+import subprocess
 import tarfile
 import pathlib
+
 
 def erase_uid(tarinfo):
     tarinfo.uid = tarinfo.gid = 0
@@ -40,6 +40,24 @@ def reloc_add(self, name, arcname=None):
         return self.add(name, arcname="{}/{}".format(RELOC_PREFIX, name), filter=erase_uid)
 
 tarfile.TarFile.reloc_add = reloc_add
+
+
+def fix_binary(path, libpath):
+    '''Makes one binary or shared library relocatable. To do that, we need to set RUNPATH to $ORIGIN/../lib64 so we get libraries
+    from the relocatable directory and not from the system during runtime. We also want to copy the interpreter used so
+    we can launch with it later.
+    '''
+    # it's a pity patchelf have to patch an actual binary.
+
+    subprocess.check_call(['patchelf',
+                           '--set-rpath',
+                           libpath,
+                           path])
+
+
+def fix_sharedlib(binpath):
+    fix_binary(binpath, '$ORIGIN/lib64')
+
 
 ap = argparse.ArgumentParser(description='Create a relocatable scylla package.')
 ap.add_argument('--version', required=True,
@@ -65,7 +83,18 @@ ar.reloc_add('build/SCYLLA-VERSION-FILE', arcname='SCYLLA-VERSION-FILE')
 ar.reloc_add('build/SCYLLA-PRODUCT-FILE', arcname='SCYLLA-PRODUCT-FILE')
 ar.reloc_add('dist/debian')
 ar.reloc_add('dist/redhat')
-ar.reloc_add('bin')
+ar.reloc_add('bin/cqlsh.py')
 ar.reloc_add('pylib')
 ar.reloc_add('install.sh')
 ar.reloc_add('build/debian/debian', arcname='debian')
+
+
+# clear scylla-driver out of the package
+# we assume that scylla-python3 already have it (and all it's .so are relocatable,
+# and pointing the correct lib folder)
+cqlsh_bin = pathlib.Path('bin/cqlsh').resolve()
+subprocess.check_call(["mv", cqlsh_bin, f'{cqlsh_bin}.zip'])
+subprocess.run(["zip", "--delete", cqlsh_bin, "site-packages/cassandra/*"])
+subprocess.check_call(["mv", f'{cqlsh_bin}.zip', cqlsh_bin])
+
+ar.reloc_add('bin/cqlsh')
