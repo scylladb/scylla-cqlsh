@@ -8,7 +8,7 @@ Obsoletes:      %{product}-tools < 5.2
 License:        Apache
 URL:            http://www.scylladb.com/
 Source0:        %{reloc_pkg}
-Requires:       python3
+Requires:       %{product}-python3 = %{version}-%{release}
 AutoReqProv:    no
 Conflicts:      cassandra
 
