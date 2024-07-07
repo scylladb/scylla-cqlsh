@@ -93,7 +93,7 @@ DEBIAN_SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt"
 if [ -f "\${DEBIAN_SSL_CERT_FILE}" ]; then
   c=\${DEBIAN_SSL_CERT_FILE}
 fi
-PYTHONPATH="\${d}:\${d}/../libexec:\$PYTHONPATH" PATH="\${d}/../bin:\${d}/$pythonpath:\${PATH}" SSL_CERT_FILE="\${c}" exec -a "\$0" "\${d}/../libexec/\${b}" "\$@"
+SHIV_ROOT="\${d}/../.shiv" PYTHONPATH="\${d}:\${d}/../libexec:\$PYTHONPATH" PATH="\${d}/../bin:\${d}/$pythonpath:\${PATH}" SSL_CERT_FILE="\${c}" exec -a "\$0" "\${d}/../libexec/\${b}" "\$@"
 EOF
     chmod 755 "$install"
 }
@@ -120,6 +120,7 @@ else
 fi
 
 install -d -m755 "$rprefix"/share/cassandra/bin
+install -d -m777 "$rprefix"/share/cassandra/.shiv
 install -d -m755 "$rprefix"/share/cassandra/libexec
 if ! $nonroot; then
     install -d -m755 "$rusr"/bin

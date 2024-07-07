@@ -25,7 +25,7 @@ import argparse
 import subprocess
 import tarfile
 import pathlib
-
+import tempfile
 
 def erase_uid(tarinfo):
     tarinfo.uid = tarinfo.gid = 0
@@ -50,13 +50,21 @@ def fix_binary(path, libpath):
     # it's a pity patchelf have to patch an actual binary.
 
     subprocess.check_call(['patchelf',
-                           '--set-rpath',
+                           '--add-rpath',
                            libpath,
                            path])
 
 
-def fix_sharedlib(binpath):
-    fix_binary(binpath, '$ORIGIN/lib64')
+def fix_sharedlib(binpath, root_path):
+    # calc the reletive path from
+    # /opt/scylladb/share/cassandra/.shiv/cqlsh_142fa711ec80198d9794271f89723bdc5719a9a533a65a105b396960a222f9b1
+    # to
+    # /opt/scylladb/python3/lib64
+    print(binpath.parent)
+    relative_len = len(pathlib.Path(binpath.parent).relative_to(root_path).parts) + 4
+    relative = pathlib.Path(*(['..'] * relative_len))
+    libpath = pathlib.Path('$ORIGIN') / relative / 'python3' / 'lib64'
+    fix_binary(binpath, libpath)
 
 
 ap = argparse.ArgumentParser(description='Create a relocatable scylla package.')
@@ -93,8 +101,13 @@ ar.reloc_add('build/debian/debian', arcname='debian')
 # we assume that scylla-python3 already have it (and all it's .so are relocatable,
 # and pointing the correct lib folder)
 cqlsh_bin = pathlib.Path('bin/cqlsh').resolve()
-subprocess.check_call(["mv", cqlsh_bin, f'{cqlsh_bin}.zip'])
-subprocess.run(["zip", "--delete", cqlsh_bin, "site-packages/cassandra/*"])
-subprocess.check_call(["mv", f'{cqlsh_bin}.zip', cqlsh_bin])
+with tempfile.TemporaryDirectory() as tmpdir:
+    subprocess.check_call(["unzip", cqlsh_bin], cwd=tmpdir)
+    for lib in pathlib.Path(tmpdir).rglob('*.so*'):
+        print(lib)
+        fix_sharedlib(lib, tmpdir)
+    subprocess.check_call(["mv", cqlsh_bin, f'{cqlsh_bin}.zip'])
+    subprocess.check_call(["zip", cqlsh_bin, '-u', '-r', '.'], cwd=tmpdir)
+    subprocess.check_call(["mv", f'{cqlsh_bin}.zip', cqlsh_bin])
 
 ar.reloc_add('bin/cqlsh')
