@@ -1061,14 +1061,14 @@ class TestCqlshOutput(BaseTestCase):
             AND min_index_interval = 128
             AND read_repair_chance = 0.0
             AND speculative_retry = '99.0PERCENTILE';
-        
+
         cdc = {{'delta': 'full', 'enabled': 'true', 'postimage': 'false', 'preimage': 'false', 'ttl': '86400'}}
         """)
 
         with testrun_cqlsh(tty=True, env=self.default_env) as c:
 
             output = c.cmd_and_response(f"CREATE TABLE  {qks}.ccc (pkey int,  PRIMARY KEY(pkey))  WITH cdc = {{'enabled': true}};")
-            self.assertEquals(output.strip(),  "")
+            self.assertEqual(output.strip(),  "")
             output = c.cmd_and_response('describe table {}.ccc'.format(qks))
             lines = _normalize_response(dedent(output))
             expected_lines = _normalize_response(expected)
