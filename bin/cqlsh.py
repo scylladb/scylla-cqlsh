@@ -488,7 +488,7 @@ class Shell(cmd.Cmd):
                 if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
                     kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
                     self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
-                else: 
+                else:
                     kwargs['contact_points'] = (self.hostname,)
                     self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
                 kwargs['port'] = self.port
@@ -1669,7 +1669,7 @@ class Shell(cmd.Cmd):
                     self.describe_element(result)
 
             except cassandra.protocol.SyntaxException:
-                # Server doesn't support DESCRIBE query, retry with 
+                # Server doesn't support DESCRIBE query, retry with
                 # client-side DESCRIBE implementation
                 self._do_describe(parsed, force_client_side_describe=True)
             except CQL_ERRORS as err:
@@ -2520,7 +2520,7 @@ def read_options(cmdlineargs, environment):
             parser.error("Cannot use --cloudconf with hostname or port")
         if options.ssl:
             parser.error("Cannot use --cloudconf with --ssl. Cloud connection encryption parameters are provided by cloud config bundle.")
-            
+
 
     hostname = option_with_default(configs.get, 'connection', 'hostname', DEFAULT_HOST)
     port = option_with_default(configs.get, 'connection', 'port', DEFAULT_PORT)
