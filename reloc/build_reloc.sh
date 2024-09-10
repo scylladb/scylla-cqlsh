@@ -81,7 +81,7 @@ fi
 
 python3 -m pip install ${PIP_EXTRA_OPTS} shiv==1.0.6 build==0.10.0 wheel==0.37.1 -t ./build/cqlsh_build
 
-PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m shiv -c cqlsh -o bin/cqlsh -- . -c requirements.txt --config-settings=--disable-copyutil=true
+CQLSH_NO_CYTHON=true PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m shiv -c cqlsh -o bin/cqlsh -- . -c requirements.txt
 
 dist/debian/debian_files_gen.py
 scripts/create-relocatable-package.py --version $VERSION "$DEST"
