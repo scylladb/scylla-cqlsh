@@ -32,6 +32,7 @@ import sys
 import traceback
 import warnings
 import webbrowser
+import logging
 from contextlib import contextmanager
 from glob import glob
 from io import StringIO
@@ -201,6 +202,8 @@ parser.add_option('-k', '--keyspace', help='Authenticate to the given keyspace.'
 parser.add_option("-f", "--file", help="Execute commands from FILE, then exit")
 parser.add_option('--debug', action='store_true',
                   help='Show additional debugging information')
+parser.add_option('--driver-debug', action='store_true',
+                  help='Show additional driver debugging information')
 parser.add_option('--coverage', action='store_true',
                   help='Collect coverage data')
 parser.add_option("--encoding", help="Specify a non-default encoding for output."
@@ -2472,7 +2475,7 @@ def read_options(cmdlineargs, environment):
     optvalues.timezone = option_with_default(configs.get, 'ui', 'timezone', None)
 
     optvalues.debug = False
-
+    optvalues.driver_debug = False
     optvalues.coverage = False
     if 'CQLSH_COVERAGE' in environment.keys():
         optvalues.coverage = True
@@ -2625,6 +2628,11 @@ def save_history():
 
 
 def main(options, hostname, port):
+    if options.driver_debug:
+        logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                            stream=sys.stdout)
+        logging.getLogger("cassandra").setLevel(logging.DEBUG)
+
     setup_cqlruleset(options.cqlmodule)
     setup_cqldocs(options.cqlmodule)
     init_history()
