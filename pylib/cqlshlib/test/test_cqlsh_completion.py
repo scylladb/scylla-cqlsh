@@ -21,8 +21,12 @@
 import locale
 import os
 import re
+
+from cassandra import InvalidRequest
+from packaging.version import Version
+
 from .basecase import BaseTestCase
-from .cassconnect import create_db, remove_db, testrun_cqlsh
+from .cassconnect import create_db, remove_db, testrun_cqlsh, get_cassandra_connection
 from .run_cqlsh import TimeoutError
 from cqlshlib.cql3handling import CqlRuleSet
 
@@ -48,6 +52,14 @@ class CqlshCompletionCase(BaseTestCase):
             output = c.cmd_and_response("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
             cls.is_scylla = '1 rows' in output
 
+        with get_cassandra_connection().connect() as session:
+            try:
+                result = session.execute("SELECT version FROM system.versions WHERE key = 'local' LIMIT 1")
+                cls.scylla_version = Version(result.one().version.rsplit('.', 2)[0])
+                cls.is_scylla_enterprise = cls.scylla_version > Version('2018.1')
+            except InvalidRequest:
+                cls.is_scylla_enterprise = False
+
     @classmethod
     def tearDownClass(cls):
         remove_db()
@@ -62,6 +74,18 @@ class CqlshCompletionCase(BaseTestCase):
 
     def tearDown(self):
         self.cqlsh_runner.__exit__(None, None, None)
+
+    def _system_keyspaces(self):
+        tables = []
+
+        if self.is_scylla:
+            tables += ['system_distributed_everywhere.']
+            if  self.is_scylla_enterprise:
+                tables += ['system_replicated_keys.']
+        else:
+            tables += ['system_views.', 'system_virtual_schema.']
+
+        return tables
 
     def _get_completions(self, inputstring, split_completed_lines=True):
         """
@@ -167,7 +191,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                          'COPY', 'CREATE', 'DEBUG', 'DELETE', 'DESC', 'DESCRIBE',
                                          'DROP', 'GRANT', 'HELP', 'INSERT', 'LIST', 'LOGIN', 'PAGING', 'REVOKE',
                                          'SELECT', 'SHOW', 'SOURCE', 'TRACING', 'EXPAND', 'SERIAL', 'TRUNCATE',
-                                         'UPDATE', 'USE', 'exit', 'quit', 'CLEAR', 'CLS'))
+                                         'UPDATE', 'USE', 'exit', 'quit', 'CLEAR', 'CLS', 'ATTACH', 'DETACH'))
 
     def test_complete_command_words(self):
         self.trycompletions('alt', '\b\b\bALTER ')
@@ -254,7 +278,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                      'EXPAND', 'GRANT', 'HELP', 'INSERT', 'LIST', 'LOGIN', 'PAGING',
                      'REVOKE', 'SELECT', 'SHOW', 'SOURCE', 'SERIAL', 'TRACING',
                      'TRUNCATE', 'UPDATE', 'USE', 'exit', 'quit',
-                     'CLEAR', 'CLS'])
+                     'CLEAR', 'CLS', 'ATTACH', 'DETACH'])
 
         self.trycompletions(
             ("INSERT INTO twenty_rows_composite_table (a, b, c) "
@@ -555,7 +579,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('DROP ',
                             choices=['AGGREGATE', 'COLUMNFAMILY', 'FUNCTION',
                                      'INDEX', 'KEYSPACE', 'ROLE', 'TABLE',
-                                     'TRIGGER', 'TYPE', 'USER', 'MATERIALIZED'])
+                                     'TRIGGER', 'TYPE', 'USER', 'MATERIALIZED', 'SERVICE_LEVEL'])
 
     def test_complete_in_drop_keyspace(self):
         self.trycompletions('DROP K', immediate='EYSPACE ')
@@ -927,9 +951,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                      'utf8_with_special_chars',
                                                      'system_traces.', 'songs',
                                                      'system_schema.', 'system_distributed.',
-                                                     self.cqlsh.keyspace + '.'] +
-                                                     (['system_distributed_everywhere.'] if self.is_scylla else
-                                                      ['system_views.', 'system_virtual_schema.']))
+                                                     self.cqlsh.keyspace + '.'] + self._system_keyspaces()
+                                                     )
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD ', choices=['<new_column_name>', 'IF'])
         self.trycompletions('ALTER TABLE IF EXISTS new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
         self.trycompletions('ALTER TABLE new_table ADD IF NOT EXISTS ', choices=['<new_column_name>'])
@@ -943,8 +966,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                                     'tags', 'system_traces.', 'system_distributed.',
                                                     'phone_number', 'band_info_type', 'address', 'system.', 'system_schema.',
                                                     'system_auth.', self.cqlsh.keyspace + '.'
-                                                    ] + (['system_distributed_everywhere.'] if self.is_scylla else
-                                                        ['system_views.', 'system_virtual_schema.']))
+                                                    ] + self._system_keyspaces())
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD ', choices=['<new_field_name>', 'IF'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type ADD IF NOT EXISTS ', choices=['<new_field_name>'])
         self.trycompletions('ALTER TYPE IF EXISTS new_type RENAME ', choices=['IF', '<quotedName>', '<identifier>'])
@@ -954,3 +976,35 @@ class TestCqlshCompletion(CqlshCompletionCase):
 
     def test_complete_in_alter_role(self):
         self.trycompletions('ALTER ROLE ', choices=['<identifier>', 'IF', '<quotedName>'])
+
+    def test_complete_in_alter_service_level(self):
+        self.trycompletions('ALTER SERVICE_LEVEL ', choices=['<identifier>', 'IF', '<quotedName>'])
+
+    def test_complete_in_create_service_level(self):
+        self.trycompletions('CREATE SERVICE_LEVEL "sla" WITH ',
+                            choices=['WORKLOAD_TYPE', 'TIMEOUT', 'SHARES'])
+
+    def test_complete_in_attach_service_level(self):
+        self.trycompletions('ATTACH ',
+                            immediate="SERVICE_LEVEL ")
+        self.trycompletions('ATTACH SERVICE_LEVEL "sla" ',
+                            immediate="TO ")
+        self.trycompletions('ATTACH SERVICE_LEVEL "sla" TO ',
+                            choices=['<identifier>', '<quotedName>'])
+
+    def test_complete_in_list_service_levels(self):
+
+        self.trycompletions("LIST ALL ",
+                            choices={'ON', 'NORECURSIVE', 'OF', 'ATTACHED', ';', 'SERVICE_LEVELS', 'PERMISSIONS'})
+
+        self.trycompletions("LIST ALL SERVICE_LEVELS ",
+                            choices={';'})
+
+        self.trycompletions("LIST ALL ATTACHED ",
+                            immediate='SERVICE_LEVELS ;')
+
+        self.trycompletions("LIST ATTACHED  ",
+                            immediate='SERVICE_LEVEL OF ')
+
+        self.trycompletions("LIST SERVICE_LEVEL  ",
+                            choices={'<quotedName>', '<identifier>'})

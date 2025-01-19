@@ -43,7 +43,7 @@ VERSION=$(./SCYLLA-VERSION-GEN ${VERSION_OVERRIDE:+ --version "$VERSION_OVERRIDE
 # the former command should generate build/SCYLLA-PRODUCT-FILE and some other version
 # related files
 PRODUCT=`cat build/SCYLLA-PRODUCT-FILE`
-DEST="build/$PRODUCT-cqlsh-$VERSION.noarch.tar.gz"
+DEST="build/$PRODUCT-cqlsh-$VERSION.$(uname -m).tar.gz"
 
 is_redhat_variant() {
     [ -f /etc/redhat-release ]
@@ -79,22 +79,9 @@ else
     ZIP_EXTRA_OPTS="--quiet"
 fi
 
-python3 -m pip install ${PIP_EXTRA_OPTS} build==0.10.0 wheel==0.37.1 -t ./build/cqlsh_build
-PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m build -s
-PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m pip download ${PIP_EXTRA_OPTS} --constraint ./requirements.txt --no-binary :all: . --no-build-isolation -d ./build/pypi_packages
+python3 -m pip install ${PIP_EXTRA_OPTS} shiv==1.0.6 build==0.10.0 wheel==0.37.1 -t ./build/cqlsh_build
 
-for package in $(ls ./build/pypi_packages/*.tar.gz)
-do
-   PACKAGE_NAME=$(basename ${package} .tar.gz)
-   TMP_PACKAGE_DIR="./build/${PACKAGE_NAME}"
-   ZIP_PACKAGE=$(pwd)"/lib/${PACKAGE_NAME}.zip"
-   mkdir -p $TMP_PACKAGE_DIR
-   tar xzf ${package} --strip-components 1 ${TAR_EXTRA_OPTS} -C $TMP_PACKAGE_DIR
-   cd ${TMP_PACKAGE_DIR}
-      mkdir -p $(dirname ${ZIP_PACKAGE})
-      zip -r ${ZIP_EXTRA_OPTS} ${ZIP_PACKAGE} *
-   cd -
-done
+CQLSH_NO_CYTHON=true PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m shiv -c cqlsh -o bin/cqlsh -- . -c requirements.txt
 
 dist/debian/debian_files_gen.py
 scripts/create-relocatable-package.py --version $VERSION "$DEST"

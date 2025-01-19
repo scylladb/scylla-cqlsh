@@ -7,8 +7,8 @@ Standards-Version: 3.9.5
 Rules-Requires-Root: no
 
 Package: %{product}-cqlsh
-Architecture: all
-Depends: python3
+Architecture: any
+Depends: %{product}-python3 (= ${binary:Version})
 Conflicts: cassandra
 Description: cqlsh is a Python-based command-line client for running CQL commands on a cassandra cluster.
 Replaces: scylla-tools (<< 5.2~rc0)

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -478,7 +478,7 @@ class Shell(cmd.Cmd):
             if protocol_version is not None:
                 kwargs['protocol_version'] = protocol_version
 
-            profiles = {
+            self.profiles = {
                 EXEC_PROFILE_DEFAULT: ExecutionProfile(consistency_level=cassandra.ConsistencyLevel.ONE,
                                                        request_timeout=request_timeout,
                                                        row_factory=ordered_dict_factory)
@@ -487,10 +487,10 @@ class Shell(cmd.Cmd):
             if cloudconf is None:
                 if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
                     kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
-                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
-                else: 
+                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+                else:
                     kwargs['contact_points'] = (self.hostname,)
-                    profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
+                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
                 kwargs['port'] = self.port
                 kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
                 # workaround until driver would know not to lose the DNS names for `server_hostname`
@@ -503,7 +503,7 @@ class Shell(cmd.Cmd):
                                 auth_provider=self.auth_provider,
                                 control_connection_timeout=connect_timeout,
                                 connect_timeout=connect_timeout,
-                                execution_profiles=profiles,
+                                execution_profiles=self.profiles,
                                 **kwargs)
         self.owns_connection = not use_conn
 
@@ -1008,6 +1008,21 @@ class Shell(cmd.Cmd):
         cmdword = tokens[0][1]
         if cmdword == '?':
             cmdword = 'help'
+
+        cmdword_lower = cmdword.lower()
+
+        # Describe statements get special treatment: we first want to
+        # send the request to the server and only when it fails will
+        # we attempt to perform it locally. That's why we don't want
+        # to follow the logic below that starts with parsing.
+        #
+        # The reason for that is changes in Scylla may need to be reflected
+        # in the grammar used in cqlsh. We want Scylla to be "independent"
+        # in that regard, so unless necessary, we don't want to do the parsing
+        # here.
+        if cmdword_lower == 'describe' or cmdword_lower == 'desc':
+            return self.perform_describe(cmdword, tokens, srcstr)
+
         custom_handler = getattr(self, 'do_' + cmdword.lower(), None)
         if custom_handler:
             parsed = cqlruleset.cql_whole_parse_tokens(tokens, srcstr=srcstr,
@@ -1497,8 +1512,8 @@ class Shell(cmd.Cmd):
                 self.print_recreate_keyspace(k, sys.stdout)
                 print('')
 
-    def do_describe(self, parsed):
-
+    # Precondition: the first token in `srcstr.lower()` is either `describe` or `desc`.
+    def perform_describe(self, cmdword, tokens, srcstr):
         """
         DESCRIBE [cqlsh only]
 
@@ -1589,7 +1604,8 @@ class Shell(cmd.Cmd):
           where object can be either a keyspace or a table or an index or a materialized
           view (in this order).
         """
-        if self.connection_versions['build'][0] < '4':
+
+        def perform_describe_locally(parsed):
             what = parsed.matched[1][1].lower()
             if what == 'functions':
                 self.describe_functions_client(self.current_keyspace)
@@ -1647,36 +1663,45 @@ class Shell(cmd.Cmd):
                 if not name:
                     name = self.cql_unprotect_name(parsed.get_binding('mvname', None))
                 self.describe_object_client(ks, name)
-        else:
-            stmt = SimpleStatement(parsed.extract_orig(), consistency_level=cassandra.ConsistencyLevel.LOCAL_ONE,
-                                   fetch_size=self.page_size if self.use_paging else None)
-            future = self.session.execute_async(stmt)
-            try:
-                result = future.result()
 
-                what = parsed.matched[1][1].lower()
+        stmt = SimpleStatement(srcstr, consistency_level=cassandra.ConsistencyLevel.LOCAL_ONE,
+                               fetch_size=self.page_size if self.use_paging else None)
+        future = self.session.execute_async(stmt)
+        try:
+            result = future.result()
 
-                if what in ('columnfamilies', 'tables', 'types', 'functions', 'aggregates'):
-                    self.describe_list(result)
-                elif what == 'keyspaces':
-                    self.describe_keyspaces(result)
-                elif what == 'cluster':
-                    self.describe_cluster(result)
-                elif what:
-                    self.describe_element(result)
+            # The second token in the statement indicates which
+            # kind of DESCRIBE we're performing.
+            what = srcstr.split()[1].lower().rstrip(';')
 
-            except CQL_ERRORS as err:
-                err_msg = err.message if hasattr(err, 'message') else str(err)
-                self.printerr(err_msg.partition("message=")[2].strip('"'))
-            except Exception:
-                import traceback
-                self.printerr(traceback.format_exc())
+            if what in ('columnfamilies', 'tables', 'types', 'functions', 'aggregates'):
+                self.describe_list(result)
+            elif what == 'keyspaces':
+                self.describe_keyspaces(result)
+            elif what == 'cluster':
+                self.describe_cluster(result)
+            elif what:
+                self.describe_element(result)
 
-            if future:
-                if future.warnings:
-                    self.print_warnings(future.warnings)
+        except cassandra.protocol.SyntaxException:
+            # Server doesn't support DESCRIBE query, retry with
+            # client-side DESCRIBE implementation
+            parsed = cqlruleset.cql_whole_parse_tokens(tokens, srcstr=srcstr,
+                                                       startsymbol='cqlshCommand')
+            if parsed and not parsed.remainder:
+                return perform_describe_locally(parsed)
+            else:
+                return self.handle_parse_error(cmdword, tokens, parsed, srcstr)
+        except CQL_ERRORS as err:
+            err_msg = err.message if hasattr(err, 'message') else str(err)
+            self.printerr(err_msg.partition("message=")[2].strip('"'))
+        except Exception:
+            import traceback
+            self.printerr(traceback.format_exc())
 
-    do_desc = do_describe
+        if future:
+            if future.warnings:
+                self.print_warnings(future.warnings)
 
     def describe_keyspaces(self, rows):
         """
@@ -2133,10 +2158,6 @@ class Shell(cmd.Cmd):
             kwargs['port'] = self.port
             kwargs['ssl_context'] = self.conn.ssl_context
             kwargs['ssl_options'] = self.conn.ssl_options
-            if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
-                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
-            else: 
-                kwargs['load_balancing_policy'] = WhiteListRoundRobinPolicy([self.hostname])
         else:
             kwargs['scylla_cloud'] = self.cloudconf
 
@@ -2145,6 +2166,7 @@ class Shell(cmd.Cmd):
                        auth_provider=auth_provider,
                        control_connection_timeout=self.conn.connect_timeout,
                        connect_timeout=self.conn.connect_timeout,
+                       execution_profiles=self.profiles,
                        **kwargs)
 
         if self.current_keyspace:
@@ -2153,9 +2175,6 @@ class Shell(cmd.Cmd):
             session = conn.connect()
 
         # Copy session properties
-        session.default_timeout = self.session.default_timeout
-        session.row_factory = self.session.row_factory
-        session.default_consistency_level = self.session.default_consistency_level
         session.max_trace_wait = self.session.max_trace_wait
 
         # Update after we've connected in case we fail to authenticate
@@ -2519,7 +2538,7 @@ def read_options(cmdlineargs, environment):
             parser.error("Cannot use --cloudconf with hostname or port")
         if options.ssl:
             parser.error("Cannot use --cloudconf with --ssl. Cloud connection encryption parameters are provided by cloud config bundle.")
-            
+
 
     hostname = option_with_default(configs.get, 'connection', 'hostname', DEFAULT_HOST)
     port = option_with_default(configs.get, 'connection', 'port', DEFAULT_PORT)

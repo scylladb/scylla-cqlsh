@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
             ;;
         "--help")
             shift 1
-	    print_usage
+            print_usage
             ;;
         *)
             print_usage
@@ -126,8 +126,6 @@ if ! $nonroot; then
 fi
 
 # scylla-cqlsh
-install -d -m755 "$rprefix"/share/cassandra/lib
-install -m644 lib/*.zip "$rprefix"/share/cassandra/lib
 install -d -m755 "$rprefix"/share/cassandra/pylib
 cp -rp pylib/cqlshlib "$rprefix"/share/cassandra/pylib
 

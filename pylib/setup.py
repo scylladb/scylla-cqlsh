@@ -15,16 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import sys
+import os
 import warnings
 from distutils.core import setup, Extension
 
 
 def get_extensions():
-    if "--no-compile" in sys.argv:
+    if os.environ.get('CQLSH_NO_CYTHON'):
         return []
-
     try:
         from Cython.Build import cythonize
         extensions = [Extension(name='copyutil',
@@ -49,5 +47,5 @@ setup(
         "Topic :: Database :: Front-Ends",
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
-    ]
+    ],
 )

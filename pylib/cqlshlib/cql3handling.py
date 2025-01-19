@@ -36,8 +36,8 @@ class UnexpectedTableStructure(UserWarning):
 
 
 SYSTEM_KEYSPACES = ('system', 'system_schema', 'system_traces', 'system_auth', 'system_distributed', 'system_views',
-                    'system_virtual_schema', 'system_distributed_everywhere')
-NONALTERBALE_KEYSPACES = ('system', 'system_schema', 'system_views', 'system_virtual_schema', 'system_distributed_everywhere')
+                    'system_virtual_schema', 'system_distributed_everywhere', 'system_replicated_keys')
+NONALTERBALE_KEYSPACES = ('system', 'system_schema', 'system_views', 'system_virtual_schema', 'system_distributed_everywhere', 'system_replicated_keys')
 
 
 class Cql3ParsingRuleSet(CqlParsingRuleSet):
@@ -296,6 +296,12 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
                             | <alterRoleStatement>
                             | <dropRoleStatement>
                             | <listRolesStatement>
+                            | <createSlaStatement>
+                            | <alterSlaStatement>
+                            | <dropSlaStatement>
+                            | <listSlaStatement>
+                            | <attachSlaStatement>
+                            | <detachRSlaStatement>
                             ;
 
 <authorizationStatement> ::= <grantStatement>
@@ -1499,6 +1505,41 @@ syntax_rules += r'''
 <listRolesStatement> ::= "LIST" "ROLES"
                               ( "OF" <rolename> )? "NORECURSIVE"?
                        ;
+'''
+
+syntax_rules += r'''
+<slaName> ::= <identifier>
+             | <quotedName>
+             | <unreservedKeyword>
+             ;
+
+<createSlaStatement> ::= "CREATE" "SERVICE_LEVEL" ( "IF" "NOT" "EXISTS" )? <slaName>
+                              ( "WITH" <slaProperty> ("AND" <slaProperty>)*)?
+                        ;
+
+<alterSlaStatement> ::= "ALTER" "SERVICE_LEVEL" ("IF" "EXISTS")? <slaName>
+                              ( "WITH" <slaProperty> ("AND" <slaProperty>)*)?
+                       ;
+
+<slaProperty> ::= "WORKLOAD_TYPE" "=" <stringLiteral>
+                 | "TIMEOUT" "=" <wholenumber>
+                 | "SHARES" "=" <wholenumber>
+                 ;
+
+<dropSlaStatement> ::= "DROP" "SERVICE_LEVEL" ("IF" "EXISTS")? <slaName>
+                      ;
+
+<listSlaStatement> ::= ("LIST" "SERVICE_LEVEL" <slaName> )
+                       | ("LIST" "ATTACHED" "SERVICE_LEVEL" "OF" <rolename> )
+                       | ("LIST" "ALL" "SERVICE_LEVELS" )
+                       | ("LIST" "ALL" "ATTACHED" "SERVICE_LEVELS" )
+                       ;
+
+<attachSlaStatement> ::= "ATTACH" "SERVICE_LEVEL" <slaName> "TO" <rolename>
+                       ;
+
+<detachRSlaStatement> ::= "DETACH" "SERVICE_LEVEL" <slaName> "FROM" <rolename>
+                        ;
 '''
 
 syntax_rules += r'''
