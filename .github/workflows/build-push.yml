@@ -23,7 +23,7 @@ jobs:
         os: [ubuntu-20.04, windows-2019, macos-13, macos-14]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.16.5
@@ -37,7 +37,7 @@ jobs:
     if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Build sdist
         run: |
@@ -52,7 +52,7 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Start Scylla
         run: |
@@ -75,7 +75,7 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Start Scylla
         run: |
@@ -98,7 +98,7 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Start Scylla cloud bundle setup with CCM
         run: |
@@ -122,7 +122,7 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Start Scylla
         run: |
@@ -145,7 +145,7 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
