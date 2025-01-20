@@ -30,6 +30,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: wheels-${{ matrix.os }}
           path: ./wheelhouse/*.whl
 
   build_sdist:
@@ -45,6 +46,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: source-dist
           path: dist/*.tar.gz
 
   integration_test_scylla:
@@ -200,8 +202,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4.1.8
         with:
-          name: artifact
           path: dist
+          merge-multiple: true
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
