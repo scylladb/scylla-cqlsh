@@ -160,7 +160,13 @@ from cqlshlib.util import is_file_secure, trim_if_present
 try:
     from cqlshlib._version import __version__ as version
 except ImportError:
-    version = "0.0.0"
+    # Get the version relative to the current file, suppressing UserWarnings from setuptools_scm
+    from setuptools_scm import get_version
+    
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        version = get_version(root='..', relative_to=__file__, tag_regex=r'^(?P<prefix>v)?(?P<version>[^\+-]+)(?P<suffix>-scylla)?$')
+
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 9042
