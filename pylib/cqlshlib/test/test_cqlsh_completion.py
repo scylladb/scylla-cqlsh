@@ -522,20 +522,21 @@ class TestCqlshCompletion(CqlshCompletionCase):
     def test_complete_in_create_keyspace(self):
         self.trycompletions('create keyspace ', '', choices=('<identifier>', '<quotedName>', 'IF'))
         self.trycompletions('create keyspace moo ',
-                            "WITH replication = {'class': '")
+                            "WITH replication = {'class': 'NetworkTopologyStrategy', ")
         self.trycompletions('create keyspace "12SomeName" with ',
-                            "replication = {'class': '")
-        self.trycompletions("create keyspace fjdkljf with foo=bar ", "",
+                            "replication = {'class': 'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace fjdkljf with replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3} AND foo=bar ", "",
                             choices=('AND', ';'))
         self.trycompletions("create keyspace fjdkljf with foo=bar AND ",
-                            "replication = {'class': '")
-        self.trycompletions("create keyspace moo with replication", " = {'class': '")
-        self.trycompletions("create keyspace moo with replication=", " {'class': '")
-        self.trycompletions("create keyspace moo with replication={", "'class':'")
-        self.trycompletions("create keyspace moo with replication={'class'", ":'")
-        self.trycompletions("create keyspace moo with replication={'class': ", "'")
-        self.trycompletions("create keyspace moo with replication={'class': '", "",
-                            choices=self.strategies())
+                            "replication = {'class': 'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace moo with replication", " = {'class': 'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace moo with replication=", " {'class': 'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace moo with replication={", "'class':'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace moo with replication={'class'", ":'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace moo with replication={'class': ", "'NetworkTopologyStrategy', ")
+        self.trycompletions("create keyspace moo with replication={'class': '", "NetworkTopologyStrategy")
+        self.trycompletions("create keyspace moo with replication={'class': 'N", "etworkTopologyStrategy'")
+        self.trycompletions("create keyspace moo with replication={'class': 'S", "impleStrategy'")
         # ttl is an "unreserved keyword". should work
         self.trycompletions("create keySPACE ttl with replication ="
                             "{ 'class' : 'SimpleStrategy'", ", 'replication_factor': ")
@@ -849,19 +850,19 @@ class TestCqlshCompletion(CqlshCompletionCase):
     # TODO: CASSANDRA-16640
     # def test_complete_in_drop_columnfamily(self):
     #     pass
-    #
+    
     # def test_complete_in_truncate(self):
     #     pass
-    #
+    
     # def test_complete_in_alter_columnfamily(self):
     #     pass
-    #
+    
     # def test_complete_in_use(self):
     #     pass
-    #
+    
     # def test_complete_in_create_index(self):
     #     pass
-    #
+    
     # def test_complete_in_drop_index(self):
     #     pass
 
@@ -870,9 +871,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('ALTER KEYSPACE ', '', choices=[self.cqlsh.keyspace, 'system_auth',
                                                             'system_distributed', 'system_traces', 'IF'])
         self.trycompletions('ALTER KEYSPACE I', immediate='F EXISTS ')
-        self.trycompletions('ALTER KEYSPACE system_trac', "es WITH replication = {'class': '")
-        self.trycompletions("ALTER KEYSPACE system_traces WITH replication = {'class': '", '',
-                            choices=['NetworkTopologyStrategy', 'SimpleStrategy'])
+        self.trycompletions('ALTER KEYSPACE system_trac', "es WITH replication = {'class': 'NetworkTopologyStrategy', ")
+        self.trycompletions("ALTER KEYSPACE system_traces WITH replication = {'class': '", 'NetworkTopologyStrategy')
 
     def test_complete_in_grant(self):
         self.trycompletions("GR",
