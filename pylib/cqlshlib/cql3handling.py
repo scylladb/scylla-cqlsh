@@ -442,7 +442,7 @@ def ks_prop_val_completer(ctxt, cass):
     if optname == 'durable_writes':
         return ["'true'", "'false'"]
     if optname == 'replication':
-        return ["{'class': '"]
+        return ["{'class': 'NetworkTopologyStrategy'"]
     return ()
 
 
@@ -471,7 +471,10 @@ def ks_prop_val_mapval_completer(ctxt, cass):
         return ()
     currentkey = dequote_value(ctxt.get_binding('propmapkey')[-1])
     if currentkey == 'class':
-        return list(map(escape_value, CqlRuleSet.replication_strategies))
+        partial = ctxt.get_binding('partial', '')
+        if partial == '':
+            return [escape_value('NetworkTopologyStrategy')]
+        return [s for s in CqlRuleSet.replication_strategies if s.startswith(partial)]
     return [Hint('<term>')]
 
 
