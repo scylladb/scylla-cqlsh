@@ -11,7 +11,7 @@ on:
       - master
 
 env:
-  CIBW_SKIP: cp36*
+  CIBW_SKIP: cp36* cp37* cp38* pp*
 
 jobs:
   build_wheels:
