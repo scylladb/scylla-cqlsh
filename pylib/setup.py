@@ -38,6 +38,7 @@ setup(
     name="scylla-cqlsh",
     install_requires=[
         "scylla-driver >= 3.25.10",
+        "lz4",
     ],
     ext_modules=get_extensions(),
     license="Apache",
