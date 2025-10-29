@@ -36,7 +36,7 @@ jobs:
   build_sdist:
     name: Build source distribution
     if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +52,10 @@ jobs:
   integration_test_scylla:
     name: Integration Tests (Scylla)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+       FORCE_COLOR: 1
+       TERM: xterm-256color
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +78,10 @@ jobs:
   integration_test_scylla_enterprise:
     name: Integration Tests (Scylla Enterprise)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+       FORCE_COLOR: 1
+       TERM: xterm-256color
     steps:
       - uses: actions/checkout@v4
 
@@ -98,7 +104,10 @@ jobs:
   integration_test_scylla_cloud_bundle:
     name: Integration Tests (Scylla Cloud Bundle)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+       FORCE_COLOR: 1
+       TERM: xterm-256color
     steps:
       - uses: actions/checkout@v4
 
@@ -122,7 +131,11 @@ jobs:
   integration_test_cassandra:
     name: Integration Tests (Cassandra)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+       FORCE_COLOR: 1
+       TERM: xterm-256color
+
     steps:
       - uses: actions/checkout@v4
 
@@ -143,7 +156,7 @@ jobs:
           pytest ./cqlshlib/test
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event_name == 'push'
     steps:
       - name: Checkout
@@ -152,8 +165,8 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -171,7 +184,7 @@ jobs:
 
       - name: Build and push release
         if: endsWith(github.event.ref, '-scylla')
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: ./Dockerfile
@@ -182,7 +195,7 @@ jobs:
             scylladb/scylla-cqlsh:latest
 
       - name: Build and push master
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         if: endsWith(github.event.ref, 'master')
         with:
           context: .
@@ -194,7 +207,7 @@ jobs:
 
   upload_pypi:
     needs: [build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
     # alternatively, to publish when a GitHub Release is created, use the following rule:
