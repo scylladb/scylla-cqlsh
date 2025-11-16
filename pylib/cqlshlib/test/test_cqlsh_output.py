@@ -26,7 +26,7 @@ import pytest
 from cassandra import InvalidRequest
 
 from .basecase import (BaseTestCase, TEST_HOST, TEST_PORT,
-                       at_a_time, cqlshlog, dedent, TEST_BUNDLE_PATH)
+                       at_a_time, cqlshlog, dedent)
 from .cassconnect import (cassandra_cursor, create_db, get_keyspace,
                           quote_name, remove_db, split_cql_commands,
                           testcall_cqlsh, testrun_cqlsh)
@@ -894,10 +894,7 @@ class TestCqlshOutput(BaseTestCase):
 
             output = c.cmd_and_response('show host;')
             self.assertHasColors(output)
-            if TEST_BUNDLE_PATH:
-                self.assertRegex(output, r'Connected to .* at Scylla Cloud\.$')
-            else:
-                self.assertRegex(output, f'^Connected to .* at {re.escape(TEST_HOST)}:{TEST_PORT}$')
+            self.assertRegex(output, f'^Connected to .* at {re.escape(TEST_HOST)}:{TEST_PORT}$')
 
     def test_eof_prints_newline(self):
         with testrun_cqlsh(tty=True, env=self.default_env) as c:
