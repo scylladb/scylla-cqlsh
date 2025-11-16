@@ -245,10 +245,7 @@ class CqlshRunner(ProcRunner):
         coverage = False
         if ('CQLSH_COVERAGE' in env.keys()):
             coverage = True
-        if basecase.TEST_BUNDLE_PATH:
-            args = tuple(args) + ("--cloudconf", basecase.TEST_BUNDLE_PATH)
-        else:
-            args = tuple(args) + (host, str(port))
+        args = tuple(args) + (host, str(port))
         if cqlver is not None:
             args += ('--cqlversion', str(cqlver))
         if keyspace is not None:

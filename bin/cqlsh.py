@@ -231,7 +231,6 @@ parser.add_option("--request-timeout", default=DEFAULT_REQUEST_TIMEOUT_SECONDS, 
 parser.add_option("-t", "--tty", action='store_true', dest='tty',
                   help='Force tty mode (command prompt).')
 parser.add_option('-v', action="version", help='Print the current version of cqlsh.')
-parser.add_option("--cloudconf", default=None, help='Configuration file for Scylla Cloud Serverless')
 
 # This is a hidden option to suppress the warning when the -p/--password command line option is used.
 # Power users may use this option if they know no other people has access to the system where cqlsh is run or don't care about security.
@@ -460,7 +459,7 @@ class Shell(cmd.Cmd):
                  connect_timeout=DEFAULT_CONNECT_TIMEOUT_SECONDS,
                  is_subshell=False,
                  auth_provider=None,
-                 cloudconf=None):
+                 ):
         cmd.Cmd.__init__(self, completekey=completekey)
         self.hostname = hostname
         self.port = port
@@ -474,7 +473,6 @@ class Shell(cmd.Cmd):
                 password = getpass.getpass()
                 self.auth_provider = PlainTextAuthProvider(username=auth_provider.username, password=password)
 
-        self.cloudconf = cloudconf
         self.keyspace = keyspace
         self.ssl = ssl
         self.tracing_enabled = tracing_enabled
@@ -493,20 +491,16 @@ class Shell(cmd.Cmd):
                                                        row_factory=ordered_dict_factory)
             }
 
-            if cloudconf is None:
-                if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
-                    kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
-                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
-                else:
-                    kwargs['contact_points'] = (self.hostname,)
-                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
-                kwargs['port'] = self.port
-                kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
-                # workaround until driver would know not to lose the DNS names for `server_hostname`
-                kwargs['ssl_options'] = {'server_hostname': self.hostname} if ssl else None
+            if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+                kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
+                self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
             else:
-                assert 'scylla' in DRIVER_NAME.lower(), f"{DRIVER_NAME} {DRIVER_VERSION} isn't supported by scylla_cloud"
-                kwargs['scylla_cloud'] = cloudconf
+                kwargs['contact_points'] = (self.hostname,)
+                self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
+            kwargs['port'] = self.port
+            kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
+            # workaround until driver would know not to lose the DNS names for `server_hostname`
+            kwargs['ssl_options'] = {'server_hostname': self.hostname} if ssl else None
 
             self.conn = Cluster(cql_version=cqlver,
                                 auth_provider=self.auth_provider,
@@ -621,14 +615,10 @@ class Shell(cmd.Cmd):
         self.show_version()
 
     def show_host(self):
-        if self.cloudconf is not None:
-            print("Connected to {0} at Scylla Cloud."
-                  .format(self.applycolor(self.get_cluster_name(), BLUE)))
-        else:
-            print("Connected to {0} at {1}:{2}"
-                  .format(self.applycolor(self.get_cluster_name(), BLUE),
-                          self.hostname,
-                          self.port))
+        print("Connected to {0} at {1}:{2}"
+              .format(self.applycolor(self.get_cluster_name(), BLUE),
+                      self.hostname,
+                      self.port))
 
     def show_version(self):
         vers = self.connection_versions.copy()
@@ -1976,7 +1966,7 @@ class Shell(cmd.Cmd):
                          connect_timeout=self.conn.connect_timeout,
                          is_subshell=True,
                          auth_provider=self.auth_provider,
-                         cloudconf=self.cloudconf)
+                         )
         # duplicate coverage related settings in subshell
         if self.coverage:
             subshell.coverage = True
@@ -2162,13 +2152,10 @@ class Shell(cmd.Cmd):
         auth_provider = PlainTextAuthProvider(username=username, password=password)
 
         kwargs = {}
-        if self.cloudconf is None:
-            kwargs['contact_points'] = (self.hostname,)
-            kwargs['port'] = self.port
-            kwargs['ssl_context'] = self.conn.ssl_context
-            kwargs['ssl_options'] = self.conn.ssl_options
-        else:
-            kwargs['scylla_cloud'] = self.cloudconf
+        kwargs['contact_points'] = (self.hostname,)
+        kwargs['port'] = self.port
+        kwargs['ssl_context'] = self.conn.ssl_context
+        kwargs['ssl_options'] = self.conn.ssl_options
 
         conn = Cluster(cql_version=self.conn.cql_version,
                        protocol_version=self.conn.protocol_version,
@@ -2497,7 +2484,6 @@ def read_options(cmdlineargs, environment):
     optvalues.request_timeout = option_with_default(configs.getint, 'connection', 'request_timeout', DEFAULT_REQUEST_TIMEOUT_SECONDS)
     optvalues.execute = None
     optvalues.insecure_password_without_warning = False
-    optvalues.cloudconf = option_with_default(configs.getboolean, 'connection', 'cloudconf', None)
 
     (options, arguments) = parser.parse_args(cmdlineargs, values=optvalues)
 
@@ -2541,13 +2527,6 @@ def read_options(cmdlineargs, environment):
     options.username = maybe_ensure_text(options.username)
     options.password = maybe_ensure_text(options.password)
     options.keyspace = maybe_ensure_text(options.keyspace)
-
-    if options.cloudconf is not None:
-        if len(arguments) > 0:
-            parser.error("Cannot use --cloudconf with hostname or port")
-        if options.ssl:
-            parser.error("Cannot use --cloudconf with --ssl. Cloud connection encryption parameters are provided by cloud config bundle.")
-
 
     hostname = option_with_default(configs.get, 'connection', 'hostname', DEFAULT_HOST)
     port = option_with_default(configs.get, 'connection', 'port', DEFAULT_PORT)
@@ -2659,7 +2638,6 @@ def main(options, hostname, port):
         sys.stderr.write("Using connect timeout: %s seconds\n" % (options.connect_timeout,))
         sys.stderr.write("Using '%s' encoding\n" % (options.encoding,))
         sys.stderr.write("Using ssl: %s\n" % (options.ssl,))
-        sys.stderr.write("Using cloudconf: %s\n" % (options.cloudconf,))
 
     # create timezone based on settings, environment or auto-detection
     timezone = None
@@ -2722,7 +2700,7 @@ def main(options, hostname, port):
                           cred_file=options.credentials,
                           username=options.username,
                           password=options.password),
-                      cloudconf=options.cloudconf)
+                      )
     except KeyboardInterrupt:
         sys.exit('Connection aborted.')
     except CQL_ERRORS as e:

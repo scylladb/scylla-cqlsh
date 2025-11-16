@@ -101,33 +101,6 @@ jobs:
            ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
 
-  integration_test_scylla_cloud_bundle:
-    name: Integration Tests (Scylla Cloud Bundle)
-    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    env:
-       FORCE_COLOR: 1
-       TERM: xterm-256color
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Start Scylla cloud bundle setup with CCM
-        run: |
-          python3 -m pip install https://github.com/scylladb/scylla-ccm/archive/master.zip
-          
-          ccm create test_sni -i 127.0.1. -n 1 --scylla --version release:6.2
-          ccm start --sni-proxy --sni-port=8443
-
-          export CQL_TEST_BUNDLE_PATH=$(realpath ~/.ccm/test_sni/config_data.yaml)
-          
-          echo "CQL_TEST_BUNDLE_PATH=${CQL_TEST_BUNDLE_PATH}" >> $GITHUB_ENV
-
-      - name: pytest
-        run: |
-          pip install -r ./pylib/requirements.txt
-           ./reloc/build_reloc.sh
-          pytest ./cqlshlib/test
-
   integration_test_cassandra:
     name: Integration Tests (Cassandra)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"

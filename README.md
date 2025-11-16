@@ -18,9 +18,6 @@ cqlsh ${SCYLLA_HOST} -e 'SELECT * FROM system.local'
 # or just using it interactively
 cqlsh ${SCYLLA_HOST} 
 
-# or using it with scylla-cloud
-cqlsh --cloudconf [path to connection bundle downloaded]
-
 # running with docker image interactively
 docker run -it scylladb/scylla-cqlsh ${SCYLLA_HOST}
 ```
