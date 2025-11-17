@@ -32,6 +32,12 @@ import threading
 import time
 import traceback
 
+# Python 3.14 changed the default to 'forkserver', which is not compatible
+# with our relocatable python. It execs our Python binary, but without our
+# ld.so. Change it back to 'fork' to avoid issues.
+mp.set_start_method('fork')
+
+
 from bisect import bisect_right
 from calendar import timegm
 from collections import defaultdict, namedtuple
