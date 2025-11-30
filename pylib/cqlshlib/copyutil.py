@@ -1074,16 +1074,19 @@ class ImportErrorHandler(object):
         self.max_attempts = self.options.copy['maxattempts']
         self.max_parse_errors = self.options.copy['maxparseerrors']
         self.max_insert_errors = self.options.copy['maxinserterrors']
-        self.err_file = self.options.copy['errfile']
+        base_err_file = self.options.copy['errfile']
+        pid = os.getpid()
+        self.err_filename = f"{base_err_file}.pid{pid}"
         self.parse_errors = 0
         self.insert_errors = 0
         self.num_rows_failed = 0
 
-        if os.path.isfile(self.err_file):
-            now = datetime.datetime.now()
-            old_err_file = self.err_file + now.strftime('.%Y%m%d_%H%M%S')
-            printdebugmsg("Renaming existing %s to %s\n" % (self.err_file, old_err_file))
-            os.rename(self.err_file, old_err_file)
+        # Ensure directory exists for error file
+        err_dir = os.path.dirname(self.err_filename) or '.'
+        try:
+            os.makedirs(err_dir, exist_ok=True)
+        except OSError as e:
+            printdebugmsg(f"Warning: Could not create error directory {err_dir}: {e}")
 
     def max_exceeded(self):
         if self.insert_errors > self.max_insert_errors >= 0:
@@ -1098,11 +1101,16 @@ class ImportErrorHandler(object):
 
     def add_failed_rows(self, rows):
         self.num_rows_failed += len(rows)
-
-        with open(self.err_file, "a") as f:
-            writer = csv.writer(f, **self.options.dialect)
-            for row in rows:
-                writer.writerow(row)
+        try:
+            with open(self.err_filename, "a", buffering=1) as f:
+                writer = csv.writer(f, **self.options.dialect)
+                for row in rows:
+                    writer.writerow(row)
+        except Exception as exc:
+            printdebugmsg("Warning: failed to write failed rows to error file %s: %s" % (self.err_filename, exc))
+            if self.shell.debug:
+                traceback.print_exc()
+            raise
 
     def handle_error(self, err):
         """
