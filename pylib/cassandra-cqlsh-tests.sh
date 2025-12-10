@@ -73,6 +73,9 @@ set -e # enable immediate exit if venv setup fails
 virtualenv --python=$PYTHON_VERSION venv
 source venv/bin/activate
 
+# Configure pip to retry on network failures (helps with timeout issues)
+export PIP_RETRIES=10
+
 pip install -r ${CASSANDRA_DIR}/pylib/requirements.txt
 pip freeze
 

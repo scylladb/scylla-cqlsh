@@ -33,7 +33,7 @@ CREATE TABLE has_all_types (
     uuidcol uuid,
     varcharcol varchar,
     varintcol varint
-) WITH compression = {'sstable_compression':'LZ4Compressor'};
+) WITH compression = {'${compression_key}':'LZ4Compressor'};
 
 INSERT INTO has_all_types (num, intcol, asciicol, bigintcol, blobcol, booleancol,
                            decimalcol, doublecol, floatcol, smallintcol, textcol,
