@@ -580,7 +580,7 @@ class Shell(cmd.Cmd):
             bool: True if path is a Unix socket, False otherwise
         """
         try:
-            return os.path.exists(path) and stat.S_ISSOCK(os.stat(path).st_mode)
+            return stat.S_ISSOCK(os.stat(path).st_mode)
         except (OSError, IOError):
             return False
 
