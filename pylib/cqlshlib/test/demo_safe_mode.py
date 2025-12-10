@@ -1,98 +1,173 @@
 #!/usr/bin/env python3
 """
-Demonstration script for safe mode feature.
+Interactive demonstration of the safe mode feature.
 
-This script shows how the safe mode feature works by simulating
-user interactions with dangerous statements.
+This script simulates the CQLsh safe mode behavior, showing how
+confirmation prompts work for dangerous operations without requiring
+a database connection.
 
-Note: This script is for demonstration purposes only. It uses the
-MockShell class from test_safe_mode.py and doesn't actually connect
-to a database.
+Run this script to see interactive examples of:
+- How dangerous statements are detected
+- How confirmation prompts appear
+- How user responses are handled
 """
 
 import sys
 import os
 
 # Add the test directory to the path to import the MockShell from test_safe_mode
-# This is only needed for the demonstration script
 sys.path.insert(0, os.path.dirname(__file__))
 
 
-def demonstrate_dangerous_statement_detection():
-    """Demonstrate how dangerous statements are detected"""
+def simulate_interactive_session():
+    """Simulate an interactive CQLsh session with safe mode enabled"""
     
-    # Import the MockShell from our test
     from test_safe_mode import MockShell
     
+    print("=" * 80)
+    print("CQLsh Safe Mode - Interactive Demonstration")
+    print("=" * 80)
+    print()
+    print("This demo shows how safe mode protects you from accidental data loss.")
+    print("You'll see confirmation prompts for dangerous operations.")
+    print()
+    print("=" * 80)
+    print()
+    
+    # Create a shell instance with safe mode enabled
     shell = MockShell(safe_mode=True, tty=True)
     
-    print("Safe Mode Feature Demonstration")
-    print("=" * 70)
-    print()
-    
-    print("1. Testing Dangerous Statement Detection")
-    print("-" * 70)
-    
-    test_statements = [
-        ("DROP KEYSPACE my_keyspace;", True),
-        ("DROP TABLE my_table;", True),
-        ("TRUNCATE my_table;", True),
-        ("DROP INDEX my_index;", True),
-        ("DROP USER my_user;", True),
-        ("SELECT * FROM my_table;", False),
-        ("INSERT INTO my_table VALUES (1);", False),
-        ("CREATE KEYSPACE test;", False),
+    # Example scenarios to demonstrate
+    scenarios = [
+        {
+            "statement": "DROP KEYSPACE production;",
+            "description": "Scenario 1: Accidentally trying to drop production keyspace"
+        },
+        {
+            "statement": "DROP TABLE users;",
+            "description": "Scenario 2: Dropping a critical table"
+        },
+        {
+            "statement": "TRUNCATE audit_log;",
+            "description": "Scenario 3: Truncating all data from a table"
+        },
     ]
     
-    for statement, expected_dangerous in test_statements:
-        is_dangerous = shell.is_dangerous_statement(statement)
-        status = "✓" if is_dangerous == expected_dangerous else "✗"
-        danger_label = "DANGEROUS" if is_dangerous else "SAFE"
-        print(f"{status} {statement:45} -> {danger_label}")
+    for i, scenario in enumerate(scenarios, 1):
+        print(f"\n{scenario['description']}")
+        print("-" * 80)
+        print(f"cqlsh> {scenario['statement']}")
+        
+        # Check if statement is dangerous
+        if shell.is_dangerous_statement(scenario['statement']):
+            # Extract the target for better prompt
+            target = shell.extract_operation_target(scenario['statement'])
+            
+            # Determine operation type
+            statement_upper = scenario['statement'].strip().upper()
+            if statement_upper.startswith('DROP KEYSPACE'):
+                op_type = 'DROP KEYSPACE'
+            elif statement_upper.startswith('DROP TABLE'):
+                op_type = 'DROP TABLE'
+            elif statement_upper.startswith('TRUNCATE'):
+                op_type = 'TRUNCATE'
+            else:
+                op_type = scenario['statement'].split()[0:2]
+                op_type = ' '.join(op_type)
+            
+            # Show the prompt
+            if target:
+                prompt_msg = f"Are you sure you want to {op_type} {target}? [N/y] "
+            else:
+                prompt_msg = f"Are you sure you want to execute this {op_type} statement? [N/y] "
+            
+            print(prompt_msg, end="")
+            
+            try:
+                # Get user input
+                response = input().strip().lower()
+                
+                if response in ('y', 'yes'):
+                    print("✓ Operation would proceed (but no database is connected)")
+                elif response == '':
+                    print("✗ Operation cancelled (default is No)")
+                else:
+                    print("✗ Operation cancelled")
+            except (KeyboardInterrupt, EOFError):
+                print("\n✗ Operation cancelled (interrupted)")
+        else:
+            print("→ Safe operation, executes without confirmation")
+        
+        if i < len(scenarios):
+            print("\n" + "─" * 80)
+    
+    print("\n\n" + "=" * 80)
+    print("Additional Examples (non-interactive)")
+    print("=" * 80)
+    print()
+    
+    print("Safe operations that don't require confirmation:")
+    safe_ops = [
+        "SELECT * FROM users;",
+        "INSERT INTO users (id, name) VALUES (1, 'John');",
+        "UPDATE users SET status = 'active' WHERE id = 1;",
+        "CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};",
+    ]
+    
+    for op in safe_ops:
+        is_dangerous = shell.is_dangerous_statement(op)
+        print(f"  {'✓' if not is_dangerous else '✗'} {op}")
     
     print()
-    print("2. Testing Target Extraction")
-    print("-" * 70)
-    
-    extraction_tests = [
+    print("Dangerous operations that require confirmation:")
+    dangerous_ops = [
         "DROP KEYSPACE test_ks;",
-        "DROP TABLE my_table;",
-        "DROP INDEX IF EXISTS my_idx;",
-        "TRUNCATE TABLE my_table;",
+        "DROP TABLE test_table;",
+        "DROP INDEX test_idx;",
+        "DROP MATERIALIZED VIEW test_mv;",
+        "TRUNCATE sessions;",
+        "DROP USER test_user;",
     ]
     
-    for statement in extraction_tests:
-        target = shell.extract_operation_target(statement)
-        print(f"  {statement:45} -> Target: '{target}'")
+    for op in dangerous_ops:
+        is_dangerous = shell.is_dangerous_statement(op)
+        print(f"  {'✓' if is_dangerous else '✗'} {op}")
     
     print()
-    print("3. Confirmation Prompt Example")
-    print("-" * 70)
-    print("In interactive mode (TTY), when you execute:")
-    print("  DROP KEYSPACE test_ks;")
+    print("=" * 80)
+    print("Whitespace Handling")
+    print("=" * 80)
     print()
-    print("You will see:")
-    print("  Are you sure you want to DROP KEYSPACE test_ks? [N/y]")
-    print()
-    print("Valid responses:")
-    print("  - 'y' or 'yes' (case insensitive) -> Proceed with operation")
-    print("  - 'n', 'no', or <Enter> (default) -> Cancel operation")
-    print("  - Ctrl+C or Ctrl+D -> Cancel operation")
-    print()
+    print("Safe mode is whitespace-insensitive and works correctly with:")
+    whitespace_examples = [
+        "DROP  KEYSPACE  test;",
+        "  DROP TABLE test;",
+        "DROP\tKEYSPACE\ttest;",
+    ]
     
-    print("4. Usage")
-    print("-" * 70)
-    print("Enable safe mode with:")
-    print("  - Command line: cqlsh --safe-mode <host>")
-    print("  - Config file: Add 'safe_mode = true' in [ui] section of cqlshrc")
-    print()
-    print("Note: Safe mode is disabled by default for backward compatibility")
-    print("      In non-TTY mode (scripts), prompts are skipped (assumes 'yes')")
-    print()
+    for op in whitespace_examples:
+        is_dangerous = shell.is_dangerous_statement(op)
+        print(f"  {'✓' if is_dangerous else '✗'} {repr(op):40} -> {'DANGEROUS' if is_dangerous else 'SAFE'}")
     
-    print("=" * 70)
-    print("All tests passed! Safe mode is working correctly.")
+    print()
+    print("=" * 80)
+    print("Configuration")
+    print("=" * 80)
+    print()
+    print("Enable safe mode via:")
+    print("  1. Command line: cqlsh --safe-mode <host>")
+    print("  2. Config file (~/.cassandra/cqlshrc):")
+    print("     [ui]")
+    print("     safe_mode = true")
+    print()
+    print("Note: Safe mode is disabled by default for backward compatibility.")
+    print("      In non-TTY mode (scripts/pipes), prompts are automatically skipped.")
+    print()
 
 
 if __name__ == '__main__':
-    demonstrate_dangerous_statement_detection()
+    try:
+        simulate_interactive_session()
+    except KeyboardInterrupt:
+        print("\n\nDemo interrupted by user.")
+        sys.exit(0)

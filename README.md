@@ -48,8 +48,6 @@ Operation cancelled.
 
 **Note:** Safe mode is disabled by default. In non-interactive mode (scripts/pipes), prompts are automatically skipped.
 
-For more details, see [SAFE_MODE.md](SAFE_MODE.md).
-
 
 
 # Contributing
