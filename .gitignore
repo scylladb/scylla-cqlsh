@@ -13,5 +13,12 @@ pylib/cqlshlib/_version.py
 pylib/cqlshlib/copyutil.c
 pylib/cqlshlib/__pycache__/**
 *.egg-info/
-*.so
+
+# Python cache files
 __pycache__/
+*.pyc
+*.pyo
+*.so
+*.egg
+*.egg-info/
+.pytest_cache/
