@@ -68,6 +68,7 @@ jobs:
 
       - name: pytest
         run: |
+          export PIP_RETRIES=10
           pip install -r ./pylib/requirements.txt
            ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
@@ -91,6 +92,7 @@ jobs:
 
       - name: pytest
         run: |
+          export PIP_RETRIES=10
           pip install -r ./pylib/requirements.txt
            ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
@@ -114,6 +116,7 @@ jobs:
 
       - name: pytest
         run: |
+          export PIP_RETRIES=10
           pip install -r ./pylib/requirements.txt
            ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
