@@ -15,3 +15,12 @@ pylib/cqlshlib/__pycache__/**
 pylib/cqlshlib/test/__pycache__/**
 bin/__pycache__/**
 *.egg-info/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.egg
+*.egg-info/
+.pytest_cache/
