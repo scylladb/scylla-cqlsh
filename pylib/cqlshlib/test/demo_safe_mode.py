@@ -4,13 +4,18 @@ Demonstration script for safe mode feature.
 
 This script shows how the safe mode feature works by simulating
 user interactions with dangerous statements.
+
+Note: This script is for demonstration purposes only. It uses the
+MockShell class from test_safe_mode.py and doesn't actually connect
+to a database.
 """
 
 import sys
 import os
 
-# Add the bin directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'bin'))
+# Add the test directory to the path to import the MockShell from test_safe_mode
+# This is only needed for the demonstration script
+sys.path.insert(0, os.path.dirname(__file__))
 
 
 def demonstrate_dangerous_statement_detection():
