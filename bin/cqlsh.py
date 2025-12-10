@@ -232,7 +232,7 @@ parser.add_option("-t", "--tty", action='store_true', dest='tty',
                   help='Force tty mode (command prompt).')
 parser.add_option('-v', action="version", help='Print the current version of cqlsh.')
 parser.add_option("--safe-mode", action='store_true', dest='safe_mode',
-                  help='Prompt for confirmation before executing dangerous operations (DROP, TRUNCATE).')
+                  help='Prompt for confirmation before executing dangerous operations (DROP, TRUNCATE). Can also be set via cqlshrc [ui] safe_mode.')
 
 # This is a hidden option to suppress the warning when the -p/--password command line option is used.
 # Power users may use this option if they know no other people has access to the system where cqlsh is run or don't care about security.
