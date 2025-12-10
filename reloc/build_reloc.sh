@@ -79,6 +79,9 @@ else
     ZIP_EXTRA_OPTS="--quiet"
 fi
 
+# Configure pip to retry on network failures (helps with timeout issues)
+export PIP_RETRIES=10
+
 python3 -m pip install ${PIP_EXTRA_OPTS} shiv==1.0.6 build==0.10.0 wheel==0.37.1 -t ./build/cqlsh_build
 
 CQLSH_NO_CYTHON=true PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m shiv -c cqlsh -o bin/cqlsh -- . -c requirements.txt
