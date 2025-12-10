@@ -198,6 +198,7 @@ def detect_db_type(cursor):
         if row is not None:
             return "scylla"
     except InvalidRequest:
+        # Query failed (e.g., table or keyspace does not exist), assume this is not a Scylla cluster.
         pass
     # Default to cassandra if detection fails
     return "cassandra"
