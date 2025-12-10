@@ -615,10 +615,17 @@ class Shell(cmd.Cmd):
         self.show_version()
 
     def show_host(self):
-        print("Connected to {0} at {1}:{2}"
-              .format(self.applycolor(self.get_cluster_name(), BLUE),
-                      self.hostname,
-                      self.port))
+        # Check if the hostname is a Unix domain socket
+        if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+            # For Unix sockets, don't display the port
+            print("Connected to {0} at {1}"
+                  .format(self.applycolor(self.get_cluster_name(), BLUE),
+                          self.hostname))
+        else:
+            print("Connected to {0} at {1}:{2}"
+                  .format(self.applycolor(self.get_cluster_name(), BLUE),
+                          self.hostname,
+                          self.port))
 
     def show_version(self):
         vers = self.connection_versions.copy()
