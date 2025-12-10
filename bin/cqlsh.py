@@ -616,7 +616,12 @@ class Shell(cmd.Cmd):
 
     def show_host(self):
         # Check if the hostname is a Unix domain socket
-        if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+        try:
+            is_unix_socket = os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode)
+        except (OSError, IOError):
+            is_unix_socket = False
+        
+        if is_unix_socket:
             # For Unix sockets, don't display the port
             print("Connected to {0} at {1}"
                   .format(self.applycolor(self.get_cluster_name(), BLUE),
