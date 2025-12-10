@@ -79,8 +79,11 @@ if __name__ == '__main__':
     print("Safe Mode Integration Test")
     print("=" * 50 + "\n")
     
-    # Change to the repository directory
-    repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Change to the repository root directory
+    # Go from pylib/cqlshlib/test/ to repository root
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_dir = os.path.join(test_dir, '..', '..', '..')
+    repo_dir = os.path.abspath(repo_dir)
     os.chdir(repo_dir)
     
     test_safe_mode_with_confirmation()

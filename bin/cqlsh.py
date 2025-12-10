@@ -1099,6 +1099,15 @@ class Shell(cmd.Cmd):
         """
         # Simple extraction - get words after the operation keyword
         words = statement.strip().split()
+        
+        # Handle TRUNCATE statements (can be "TRUNCATE table" or "TRUNCATE TABLE table")
+        if len(words) >= 2 and words[0].upper() == 'TRUNCATE':
+            if len(words) >= 3 and words[1].upper() == 'TABLE':
+                return words[2].strip(';')
+            else:
+                return words[1].strip(';')
+        
+        # Handle other DROP statements
         if len(words) >= 3:
             # Handle "DROP KEYSPACE name", "DROP TABLE name", etc.
             # Skip "IF EXISTS" if present
@@ -1145,6 +1154,21 @@ class Shell(cmd.Cmd):
             return False
 
     def perform_statement(self, statement):
+        """
+        Execute a CQL statement.
+        
+        This method performs the following:
+        1. If safe mode is enabled, checks if the statement is dangerous (DROP/TRUNCATE)
+        2. If dangerous, prompts for user confirmation
+        3. If cancelled or safe mode check fails, prints error and returns False
+        4. Otherwise, executes the statement and handles tracing if enabled
+        
+        Args:
+            statement (str): The CQL statement to execute
+            
+        Returns:
+            bool: True if statement executed successfully, False if cancelled or failed
+        """
         # Check if safe mode is enabled and statement is dangerous
         if self.safe_mode and self.is_dangerous_statement(statement):
             if not self.prompt_for_confirmation(statement):

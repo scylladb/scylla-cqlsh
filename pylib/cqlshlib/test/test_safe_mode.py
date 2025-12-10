@@ -64,6 +64,15 @@ class MockShell:
         """
         # Simple extraction - get words after the operation keyword
         words = statement.strip().split()
+        
+        # Handle TRUNCATE statements (can be "TRUNCATE table" or "TRUNCATE TABLE table")
+        if len(words) >= 2 and words[0].upper() == 'TRUNCATE':
+            if len(words) >= 3 and words[1].upper() == 'TABLE':
+                return words[2].strip(';')
+            else:
+                return words[1].strip(';')
+        
+        # Handle other DROP statements
         if len(words) >= 3:
             # Handle "DROP KEYSPACE name", "DROP TABLE name", etc.
             # Skip "IF EXISTS" if present
@@ -229,9 +238,7 @@ class TestSafeMode(unittest.TestCase):
         """Test extracting target from TRUNCATE statement"""
         shell = MockShell()
         
-        # TRUNCATE only has 2 words, so it returns empty string in current implementation
-        # This is acceptable as we still get a confirmation prompt
-        self.assertEqual(shell.extract_operation_target("TRUNCATE test_table;"), "")
+        self.assertEqual(shell.extract_operation_target("TRUNCATE test_table;"), "test_table")
         self.assertEqual(shell.extract_operation_target("TRUNCATE TABLE test_table;"), "test_table")
 
     @patch('builtins.input', return_value='y')
