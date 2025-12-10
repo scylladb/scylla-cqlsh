@@ -572,10 +572,10 @@ class Shell(cmd.Cmd):
     def is_unix_socket(self, path):
         """
         Check if the given path is a Unix domain socket.
-        
+
         Args:
             path: File path to check
-            
+
         Returns:
             bool: True if path is a Unix socket, False otherwise
         """
