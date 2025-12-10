@@ -494,7 +494,7 @@ class Shell(cmd.Cmd):
                                                        row_factory=ordered_dict_factory)
             }
 
-            if os.path.exists(self.hostname) and stat.S_ISSOCK(os.stat(self.hostname).st_mode):
+            if self.is_unix_socket(self.hostname):
                 kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
                 self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
             else:
@@ -577,6 +577,21 @@ class Shell(cmd.Cmd):
         self.single_statement = single_statement
         self.is_subshell = is_subshell
 
+    def is_unix_socket(self, path):
+        """
+        Check if the given path is a Unix domain socket.
+
+        Args:
+            path (str): File path to check
+
+        Returns:
+            bool: True if path is a Unix socket, False otherwise
+        """
+        try:
+            return stat.S_ISSOCK(os.stat(path).st_mode)
+        except OSError:
+            return False
+
     @property
     def batch_mode(self):
         return not self.tty
@@ -623,10 +638,17 @@ class Shell(cmd.Cmd):
         self.show_version()
 
     def show_host(self):
-        print("Connected to {0} at {1}:{2}"
-              .format(self.applycolor(self.get_cluster_name(), BLUE),
-                      self.hostname,
-                      self.port))
+        # Check if the hostname is a Unix domain socket
+        if self.is_unix_socket(self.hostname):
+            # For Unix sockets, don't display the port
+            print("Connected to {0} at {1}"
+                  .format(self.applycolor(self.get_cluster_name(), BLUE),
+                          self.hostname))
+        else:
+            print("Connected to {0} at {1}:{2}"
+                  .format(self.applycolor(self.get_cluster_name(), BLUE),
+                          self.hostname,
+                          self.port))
 
     def show_version(self):
         vers = self.connection_versions.copy()
