@@ -106,24 +106,33 @@ class TestUDFLargeInput(BaseTestCase):
 
     def _generate_large_wasm_blob(self, size_mb=1):
         """
-        Generate a large blob of data to simulate a WASM UDF body.
+        Generate a large blob of actual WASM bytecode for a UDF body.
+        
+        This uses a minimal valid WASM module (41 bytes) that exports an "add" function
+        which takes two i32 parameters and returns their sum. The module is repeated
+        to reach the desired size.
         
         Args:
             size_mb: Size in megabytes for the generated blob
             
         Returns:
-            A hex string representing the blob
+            A hex string representing the WASM bytecode
         """
-        # Generate a repeating pattern to simulate WASM bytecode
-        # Using hex representation as WASM is binary data
-        # WASM magic number (0x6d736100) and version (0x00000001) in little-endian format
-        base_pattern = "0061736d01000000"
-        # Repeat the pattern to reach desired size
+        # Minimal valid WASM module (41 bytes) with an exported "add" function
+        # Module structure:
+        # - Magic number and version: \0asm version 1
+        # - Type section: func(i32, i32) -> i32
+        # - Function section: declares 1 function of type 0
+        # - Export section: exports function 0 as "add"
+        # - Code section: local.get 0, local.get 1, i32.add, end
+        minimal_wasm_module = "0061736d0100000001070160027f7f017f030201000707010361646400000a09010700200020016a0b"
+        
+        # Calculate how many times to repeat the module to reach desired size
         size_bytes = size_mb * 1024 * 1024
         # 2 hex characters per byte
         hex_chars_needed = size_bytes * 2
-        repeats = hex_chars_needed // len(base_pattern) + 1
-        blob_hex = (base_pattern * repeats)[:hex_chars_needed]
+        repeats = hex_chars_needed // len(minimal_wasm_module) + 1
+        blob_hex = (minimal_wasm_module * repeats)[:hex_chars_needed]
         return blob_hex
 
     def test_large_udf_insertion_via_cqlsh(self):
