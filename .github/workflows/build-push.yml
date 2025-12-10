@@ -82,7 +82,7 @@ jobs:
 
       - name: Start Scylla
         run: |
-          export DOCKER_ID=$(docker run -d -e CASSANDRA_CLUSTER_NAME=test cassandra:latest )
+          export DOCKER_ID=$(docker run -d -e CASSANDRA_CLUSTER_NAME=test cassandra:5.0 )
           export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
           while ! nc -z ${CQL_TEST_HOST} 9042; do
                   sleep 0.1 # wait for 1/10 of the second before check again
