@@ -1072,7 +1072,10 @@ class Shell(cmd.Cmd):
         Check if a statement is dangerous and requires confirmation in safe mode.
         Dangerous statements include DROP and TRUNCATE operations.
         """
-        statement_upper = statement.strip().upper()
+        # Normalize whitespace: strip leading/trailing spaces and collapse multiple spaces to single space
+        import re
+        statement_normalized = re.sub(r'\s+', ' ', statement.strip()).upper()
+        
         dangerous_keywords = [
             'DROP KEYSPACE',
             'DROP TABLE',
@@ -1089,7 +1092,7 @@ class Shell(cmd.Cmd):
             'TRUNCATE'
         ]
         for keyword in dangerous_keywords:
-            if statement_upper.startswith(keyword):
+            if statement_normalized.startswith(keyword):
                 return True
         return False
 

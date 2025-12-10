@@ -37,7 +37,10 @@ class MockShell:
         Check if a statement is dangerous and requires confirmation in safe mode.
         Dangerous statements include DROP and TRUNCATE operations.
         """
-        statement_upper = statement.strip().upper()
+        # Normalize whitespace: strip leading/trailing spaces and collapse multiple spaces to single space
+        import re
+        statement_normalized = re.sub(r'\s+', ' ', statement.strip()).upper()
+        
         dangerous_keywords = [
             'DROP KEYSPACE',
             'DROP TABLE',
@@ -54,7 +57,7 @@ class MockShell:
             'TRUNCATE'
         ]
         for keyword in dangerous_keywords:
-            if statement_upper.startswith(keyword):
+            if statement_normalized.startswith(keyword):
                 return True
         return False
     
@@ -219,6 +222,29 @@ class TestSafeMode(unittest.TestCase):
         self.assertFalse(shell.is_dangerous_statement("CREATE KEYSPACE test_ks;"))
         self.assertFalse(shell.is_dangerous_statement("CREATE TABLE test_table;"))
         self.assertFalse(shell.is_dangerous_statement("ALTER TABLE test_table;"))
+
+    def test_is_dangerous_statement_whitespace_insensitive(self):
+        """Test that dangerous statement detection works regardless of whitespace"""
+        shell = MockShell()
+        
+        # Test with extra spaces between words
+        self.assertTrue(shell.is_dangerous_statement("DROP  KEYSPACE  test_ks;"))
+        self.assertTrue(shell.is_dangerous_statement("DROP    TABLE test_table;"))
+        self.assertTrue(shell.is_dangerous_statement("TRUNCATE   test_table;"))
+        
+        # Test with leading spaces
+        self.assertTrue(shell.is_dangerous_statement("  DROP KEYSPACE test_ks;"))
+        self.assertTrue(shell.is_dangerous_statement("   DROP TABLE test_table;"))
+        self.assertTrue(shell.is_dangerous_statement("    TRUNCATE test_table;"))
+        
+        # Test with tabs and mixed whitespace
+        self.assertTrue(shell.is_dangerous_statement("DROP\tKEYSPACE test_ks;"))
+        self.assertTrue(shell.is_dangerous_statement("DROP \t TABLE test_table;"))
+        self.assertTrue(shell.is_dangerous_statement("\t\tTRUNCATE test_table;"))
+        
+        # Test with combination of extra spaces and leading spaces
+        self.assertTrue(shell.is_dangerous_statement("  DROP  MATERIALIZED  VIEW  test_mv;"))
+        self.assertTrue(shell.is_dangerous_statement("   DROP   INDEX   test_idx;"))
 
     def test_extract_operation_target_keyspace(self):
         """Test extracting target from DROP KEYSPACE statement"""
