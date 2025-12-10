@@ -202,6 +202,7 @@ parser.add_option("--browser", dest='browser', help="""The browser to use to dis
                                                     - one of the supported browsers in https://docs.python.org/3/library/webbrowser.html.
                                                     - browser path followed by %s, example: /usr/bin/google-chrome-stable %s""")
 parser.add_option('--ssl', action='store_true', help='Use SSL', default=False)
+parser.add_option('--no-compression', action='store_true', help='Disable compression', default=False)
 parser.add_option("-u", "--username", help="Authenticate as user.")
 parser.add_option("-p", "--password", help="Authenticate using password.")
 parser.add_option('-k', '--keyspace', help='Authenticate to the given keyspace.')
@@ -459,12 +460,14 @@ class Shell(cmd.Cmd):
                  connect_timeout=DEFAULT_CONNECT_TIMEOUT_SECONDS,
                  is_subshell=False,
                  auth_provider=None,
+                 no_compression=False,
                  ):
         cmd.Cmd.__init__(self, completekey=completekey)
         self.hostname = hostname
         self.port = port
         self.auth_provider = auth_provider
         self.username = username
+        self.no_compression = no_compression
 
         if isinstance(auth_provider, PlainTextAuthProvider):
             self.username = auth_provider.username
@@ -501,6 +504,11 @@ class Shell(cmd.Cmd):
             kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
             # workaround until driver would know not to lose the DNS names for `server_hostname`
             kwargs['ssl_options'] = {'server_hostname': self.hostname} if ssl else None
+            
+            # Disable compression if requested. When not set, the driver will use its default
+            # compression behavior (which is to enable compression if lz4 is available)
+            if no_compression:
+                kwargs['compression'] = False
 
             self.conn = Cluster(cql_version=cqlver,
                                 auth_provider=self.auth_provider,
@@ -2156,6 +2164,10 @@ class Shell(cmd.Cmd):
         kwargs['port'] = self.port
         kwargs['ssl_context'] = self.conn.ssl_context
         kwargs['ssl_options'] = self.conn.ssl_options
+        
+        # Preserve compression setting from original connection
+        if self.no_compression:
+            kwargs['compression'] = False
 
         conn = Cluster(cql_version=self.conn.cql_version,
                        protocol_version=self.conn.protocol_version,
@@ -2475,6 +2487,7 @@ def read_options(cmdlineargs, environment):
 
     optvalues.file = None
     optvalues.ssl = option_with_default(configs.getboolean, 'connection', 'ssl', DEFAULT_SSL)
+    optvalues.no_compression = option_with_default(configs.getboolean, 'connection', 'no_compression', False)
     optvalues.encoding = option_with_default(configs.get, 'ui', 'encoding', UTF8)
 
     optvalues.tty = option_with_default(configs.getboolean, 'ui', 'tty', sys.stdin.isatty())
@@ -2638,6 +2651,7 @@ def main(options, hostname, port):
         sys.stderr.write("Using connect timeout: %s seconds\n" % (options.connect_timeout,))
         sys.stderr.write("Using '%s' encoding\n" % (options.encoding,))
         sys.stderr.write("Using ssl: %s\n" % (options.ssl,))
+        sys.stderr.write("Using compression: %s\n" % (not options.no_compression,))
 
     # create timezone based on settings, environment or auto-detection
     timezone = None
@@ -2700,6 +2714,7 @@ def main(options, hostname, port):
                           cred_file=options.credentials,
                           username=options.username,
                           password=options.password),
+                      no_compression=options.no_compression,
                       )
     except KeyboardInterrupt:
         sys.exit('Connection aborted.')
