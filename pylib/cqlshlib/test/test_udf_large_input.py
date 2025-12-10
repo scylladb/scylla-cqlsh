@@ -19,6 +19,46 @@ Integration test for reproducing slow performance when inserting large UDF (WASM
 
 This test is a reproducer for the issue where cqlsh takes a very long time (e.g., 2 hours)
 to insert a UDF with large input (>1MB), while the Python driver does it quickly.
+
+## Running the test:
+
+To run this test with UDF enabled in Scylla, start a Scylla container with UDF configuration:
+
+    # Create a scylla.yaml with UDF enabled
+    echo "enable_user_defined_functions: true" > /tmp/scylla.yaml
+    echo "experimental_features:" >> /tmp/scylla.yaml
+    echo "  - udf" >> /tmp/scylla.yaml
+    
+    # Start Scylla with custom config
+    docker run -d --name scylla-test \\
+      -v /tmp/scylla.yaml:/etc/scylla/scylla.yaml \\
+      scylladb/scylla:latest --cluster-name test
+    
+    # Wait for Scylla to be ready and run the test
+    export DOCKER_ID=$(docker ps --filter "name=scylla-test" -q)
+    export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+    while ! nc -z ${CQL_TEST_HOST} 9042; do sleep 0.5; done
+    pytest pylib/cqlshlib/test/test_udf_large_input.py -v -s
+
+## Expected behavior:
+
+When UDF is NOT enabled (default):
+- Test will fail with "User defined functions are disabled" error
+- Execution time will be fast (<1 second)
+- Test passes (as it expects either success or error)
+
+When UDF IS enabled and performance issue exists:
+- Test will take a very long time to execute (potentially hours)
+- Test will fail with timeout assertion if execution takes >60 seconds
+- This demonstrates the performance issue
+
+When UDF IS enabled and performance issue is fixed:
+- Test will execute quickly (<60 seconds)
+- Function will be created successfully
+- Test passes
+
+Note: WASM UDF support may vary by Scylla version. Check the Scylla documentation
+at https://opensource.docs.scylladb.com/master/cql/wasm.html for details.
 """
 
 import time
@@ -32,6 +72,9 @@ from .cassconnect import (cassandra_cursor, create_db, get_keyspace,
 
 class TestUDFLargeInput(BaseTestCase):
     """Test for UDF insertion with large input to reproduce performance issues."""
+    
+    # Maximum characters of cqlsh output to log (to avoid overwhelming logs)
+    MAX_LOG_OUTPUT_CHARS = 500
 
     @classmethod
     def setUpClass(cls):
@@ -43,7 +86,7 @@ class TestUDFLargeInput(BaseTestCase):
         with cassandra_cursor(ks=None) as curs:
             try:
                 result = curs.execute("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
-                cls.is_scylla = len(result.all()) == 1
+                cls.is_scylla = len(result.all()) >= 1
             except InvalidRequest:
                 cls.is_scylla = False
         
@@ -73,10 +116,12 @@ class TestUDFLargeInput(BaseTestCase):
         """
         # Generate a repeating pattern to simulate WASM bytecode
         # Using hex representation as WASM is binary data
-        base_pattern = "0061736d01000000"  # WASM magic number and version
+        # WASM magic number (0x6d736100) and version (0x00000001) in little-endian format
+        base_pattern = "0061736d01000000"
         # Repeat the pattern to reach desired size
         size_bytes = size_mb * 1024 * 1024
-        hex_chars_needed = size_bytes * 2  # 2 hex chars per byte
+        # 2 hex characters per byte
+        hex_chars_needed = size_bytes * 2
         repeats = hex_chars_needed // len(base_pattern) + 1
         blob_hex = (base_pattern * repeats)[:hex_chars_needed]
         return blob_hex
@@ -90,7 +135,8 @@ class TestUDFLargeInput(BaseTestCase):
         """
         # Generate a 1MB blob for the UDF body
         large_blob = self._generate_large_wasm_blob(size_mb=1)
-        blob_size_mb = len(large_blob) / (2 * 1024 * 1024)  # Convert hex chars to MB
+        # 2 hex chars per byte, then convert bytes to MB
+        blob_size_mb = len(large_blob) / (2 * 1024 * 1024)
         
         cqlshlog.info(f"Generated blob of size: {blob_size_mb:.2f} MB")
         
@@ -119,7 +165,7 @@ class TestUDFLargeInput(BaseTestCase):
             elapsed_time = time.time() - start_time
             
             cqlshlog.info(f"cqlsh execution time: {elapsed_time:.2f} seconds")
-            cqlshlog.info(f"cqlsh output: {output[:500]}")  # Log first 500 chars
+            cqlshlog.info(f"cqlsh output: {output[:self.MAX_LOG_OUTPUT_CHARS]}")
             
             # The test passes if it completes (even with an error), as we're measuring time
             # In a real scenario, we'd compare with Python driver execution time
