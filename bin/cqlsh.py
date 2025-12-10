@@ -581,7 +581,7 @@ class Shell(cmd.Cmd):
         """
         try:
             return stat.S_ISSOCK(os.stat(path).st_mode)
-        except (OSError, IOError):
+        except OSError:
             return False
 
     @property
