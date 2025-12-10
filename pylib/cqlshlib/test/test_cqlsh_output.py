@@ -44,7 +44,9 @@ def _normalize_response(response):
         for col in deprecated_options:
             if col in line:
                 return False
-        ignore_options = ["paxos_grace_seconds", "tombstone_gc", "cdc"]
+        ignore_options = ["paxos_grace_seconds", "tombstone_gc", "cdc",
+                          "allow_auto_snapshot", "incremental_backups" # cassandra 5.0 one we don't care about
+                          ]
         for col in ignore_options:
             if col in line:
                 return False
