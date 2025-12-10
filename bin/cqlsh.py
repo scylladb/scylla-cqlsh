@@ -574,7 +574,7 @@ class Shell(cmd.Cmd):
         Check if the given path is a Unix domain socket.
 
         Args:
-            path: File path to check
+            path (str): File path to check
 
         Returns:
             bool: True if path is a Unix socket, False otherwise
