@@ -804,7 +804,7 @@ class TestCqlParsing(TestCase):
     def test_comments_with_cql_statements(self):
         """
         Test that CQL comments work correctly after removing strip_comment_blocks().
-        This verifies that the lexer grammar properly handles comments in various positions.
+        Verifies that the lexer grammar properly handles comments in various positions.
         """
         # Single-line comments with --
         parsed = parse_cqlsh_statements('SELECT * FROM mytable; -- this is a comment')
