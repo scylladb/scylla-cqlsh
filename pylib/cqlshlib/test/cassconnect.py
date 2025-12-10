@@ -17,10 +17,11 @@
 
 import contextlib
 import io
-import os.path
 import random
 import string
+import os
 
+from cassandra import InvalidRequest
 from cassandra.cluster import Cluster
 from cassandra.metadata import maybe_escape_name as quote_name
 from cassandra.auth import PlainTextAuthProvider
@@ -96,7 +97,19 @@ def execute_cql_commands(cursor, source, logprefix='INIT: '):
 
 def execute_cql_file(cursor, fname):
     with io.open(fname, "r", encoding="utf-8") as f:
-        return execute_cql_commands(cursor, f.read())
+        content = f.read()
+        # Auto-detect compression_key if not provided and placeholder exists
+        if "${compression_key}" in content:
+            db_type = detect_db_type(cursor)
+            if db_type == "scylla":
+                compression_key = "sstable_compression"
+            elif db_type == "cassandra":
+                compression_key = "class"
+            else:
+                raise ValueError(f"Unknown DB type detected: {db_type}. Use 'scylla' or 'cassandra'.")
+        if compression_key is not None:
+            content = string.Template(content).safe_substitute(compression_key=compression_key)
+        return execute_cql_commands(cursor, content)
 
 
 def create_db():
@@ -177,3 +190,15 @@ def testcall_cqlsh(keyspace=None, **kwargs):
     if 'input' in kwargs.keys() and isinstance(kwargs['input'], str):
         kwargs['input'] = kwargs['input'].encode('utf-8')
     return call_cqlsh(keyspace=keyspace, **kwargs)
+
+
+def detect_db_type(cursor):
+    try:
+        row = cursor.execute("SELECT * FROM system_schema.scylla_tables LIMIT 1").one()
+        if row is not None:
+            return "scylla"
+    except InvalidRequest:
+        pass
+    # Default to cassandra if detection fails
+    return "cassandra"
+
