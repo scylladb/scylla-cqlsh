@@ -98,6 +98,13 @@ class TestEscapeSequenceDecoding(unittest.TestCase):
             '\n\r\t'
         )
 
+    def test_hex_escape_at_end_of_string(self):
+        """Test that hex escape sequences at the end of a string work correctly."""
+        # This tests the boundary condition fixed in the code review
+        self.assertEqual(decode_escape_sequences('test\\xff'), 'test\xff')
+        self.assertEqual(decode_escape_sequences('\\x00'), '\x00')
+        self.assertEqual(decode_escape_sequences('a\\x01'), 'a\x01')
+
 
 if __name__ == '__main__':
     unittest.main()

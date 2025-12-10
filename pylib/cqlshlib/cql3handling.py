@@ -157,8 +157,8 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
         while i < len(s):
             if s[i] == '\\' and i + 1 < len(s):
                 next_char = s[i + 1]
-                if next_char == 'x' and i + 3 < len(s):
-                    # Handle hex escape sequence \xHH
+                if next_char == 'x' and i + 4 <= len(s):
+                    # Handle hex escape sequence \xHH (need 4 chars total: \xHH)
                     hex_digits = s[i + 2:i + 4]
                     try:
                         byte_val = int(hex_digits, 16)
