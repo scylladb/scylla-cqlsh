@@ -138,12 +138,71 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
             return name.lower()
 
     @staticmethod
+    def decode_escape_sequences(s):
+        """
+        Decode escape sequences in a string.
+        Supports:
+        - \\xHH for hex values (e.g., \\x01 for byte 0x01)
+        - \\n for newline
+        - \\r for carriage return
+        - \\t for tab
+        - \\' for single quote
+        - \\\\ for backslash
+        """
+        if '\\' not in s:
+            return s
+        
+        result = []
+        i = 0
+        while i < len(s):
+            if s[i] == '\\' and i + 1 < len(s):
+                next_char = s[i + 1]
+                if next_char == 'x' and i + 4 <= len(s):
+                    # Handle hex escape sequence \xHH (need 4 chars total: \xHH)
+                    hex_digits = s[i + 2:i + 4]
+                    try:
+                        byte_val = int(hex_digits, 16)
+                        result.append(chr(byte_val))
+                        i += 4
+                        continue
+                    except (ValueError, OverflowError):
+                        # Not a valid hex sequence, treat as literal
+                        pass
+                elif next_char == 'n':
+                    result.append('\n')
+                    i += 2
+                    continue
+                elif next_char == 'r':
+                    result.append('\r')
+                    i += 2
+                    continue
+                elif next_char == 't':
+                    result.append('\t')
+                    i += 2
+                    continue
+                elif next_char == '\\':
+                    result.append('\\')
+                    i += 2
+                    continue
+                elif next_char == "'":
+                    result.append("'")
+                    i += 2
+                    continue
+            
+            result.append(s[i])
+            i += 1
+        
+        return ''.join(result)
+
+    @staticmethod
     def dequote_value(cqlword):
         cqlword = cqlword.strip()
         if cqlword == '':
             return cqlword
         if cqlword[0] == "'" and cqlword[-1] == "'":
             cqlword = cqlword[1:-1].replace("''", "'")
+            # Decode escape sequences after removing quotes
+            cqlword = Cql3ParsingRuleSet.decode_escape_sequences(cqlword)
         return cqlword
 
 
@@ -155,6 +214,7 @@ explain_completion = CqlRuleSet.explain_completion
 dequote_value = CqlRuleSet.dequote_value
 dequote_name = CqlRuleSet.dequote_name
 escape_value = CqlRuleSet.escape_value
+decode_escape_sequences = CqlRuleSet.decode_escape_sequences
 
 # BEGIN SYNTAX/COMPLETION RULE DEFINITIONS
 
