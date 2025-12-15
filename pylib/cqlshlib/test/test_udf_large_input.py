@@ -62,12 +62,14 @@ at https://opensource.docs.scylladb.com/master/cql/wasm.html for details.
 """
 
 import time
+import os
 import pytest
 from cassandra import InvalidRequest
 
-from .basecase import BaseTestCase, cqlshlog
+from .basecase import BaseTestCase, cqlshlog, test_dir
 from .cassconnect import (cassandra_cursor, create_db, get_keyspace,
-                          quote_name, remove_db, testcall_cqlsh)
+                          quote_name, remove_db, testcall_cqlsh, split_cql_commands)
+from cqlshlib.cql3handling import CqlRuleSet
 
 
 class TestUDFLargeInput(BaseTestCase):
@@ -103,6 +105,23 @@ class TestUDFLargeInput(BaseTestCase):
     def tearDownClass(cls):
         """Clean up test database."""
         remove_db()
+
+    def _load_real_wasm_udf(self):
+        """
+        Load the real WASM UDF from the udf_commas.cql file.
+        
+        This file contains an actual WASM function that was reported to cause
+        performance issues in cqlsh.
+        
+        Returns:
+            The CQL statement as a string
+        """
+        udf_file = os.path.join(test_dir, 'udf_commas.cql')
+        with open(udf_file, 'r') as f:
+            content = f.read()
+        
+        cqlshlog.info(f"Loaded real WASM UDF file: {len(content)} chars ({len(content) / (1024 * 1024):.2f} MB)")
+        return content
 
     def _generate_large_wasm_blob(self, size_mb=1):
         """
@@ -255,4 +274,93 @@ class TestUDFLargeInput(BaseTestCase):
         except Exception as e:
             elapsed_time = time.time() - start_time
             cqlshlog.error(f"Driver test failed after {elapsed_time:.2f} seconds: {e}")
+            raise
+
+    def test_cql_split_statements_on_real_wasm(self):
+        """
+        Test that cql_split_statements can handle the real WASM UDF file without errors.
+        
+        This verifies that the lexer doesn't raise a LexingError on large WASM input
+        that contains commas and other special characters.
+        """
+        # Load the real WASM UDF
+        udf_content = self._load_real_wasm_udf()
+        
+        cqlshlog.info(f"Testing cql_split_statements on {len(udf_content)} chars")
+        
+        # Try to split statements - this should not raise a LexingError
+        start_time = time.time()
+        try:
+            statements, endtoken_escaped = CqlRuleSet.cql_split_statements(udf_content)
+            elapsed_time = time.time() - start_time
+            
+            cqlshlog.info(f"cql_split_statements completed in {elapsed_time:.2f} seconds")
+            cqlshlog.info(f"Found {len(statements)} statements")
+            cqlshlog.info(f"Endtoken escaped: {endtoken_escaped}")
+            
+            # Should successfully parse the statement
+            assert len(statements) > 0, "Should have parsed at least one statement"
+            
+            # Log success
+            cqlshlog.info("✓ cql_split_statements successfully parsed real WASM UDF")
+            
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            cqlshlog.error(f"cql_split_statements failed after {elapsed_time:.2f} seconds: {type(e).__name__}: {e}")
+            raise
+
+    def test_real_wasm_udf_insertion_via_cqlsh(self):
+        """
+        Test inserting the real WASM UDF via cqlsh to measure performance.
+        
+        This uses the actual udf_commas.cql file that was reported to cause
+        2-hour execution times in cqlsh.
+        """
+        # Load the real WASM UDF
+        create_function_stmt = self._load_real_wasm_udf()
+        
+        # Modify the statement to use our test keyspace
+        # Replace test_ks with our keyspace
+        create_function_stmt = create_function_stmt.replace('test_ks.commas', f'{self.keyspace}.commas')
+        
+        cqlshlog.info(f"Testing real WASM UDF insertion via cqlsh")
+        cqlshlog.info(f"CQL statement size: {len(create_function_stmt) / (1024 * 1024):.2f} MB")
+        
+        # Time the execution via cqlsh
+        start_time = time.time()
+        
+        try:
+            output, result = testcall_cqlsh(
+                input=create_function_stmt,
+                keyspace=self.keyspace
+            )
+            
+            elapsed_time = time.time() - start_time
+            
+            cqlshlog.info(f"cqlsh execution time: {elapsed_time:.2f} seconds")
+            cqlshlog.info(f"cqlsh output: {output[:self.MAX_LOG_OUTPUT_CHARS]}")
+            
+            # Log whether it succeeded or failed
+            if result != 0:
+                cqlshlog.warning(f"cqlsh returned error code: {result}")
+                cqlshlog.warning(f"This may be expected if WASM UDFs are not supported")
+            else:
+                cqlshlog.info(f"Function created successfully")
+                
+                # Clean up - drop the function
+                try:
+                    drop_stmt = f"DROP FUNCTION {self.keyspace}.commas;"
+                    testcall_cqlsh(input=drop_stmt, keyspace=self.keyspace)
+                except Exception as e:
+                    cqlshlog.warning(f"Could not drop function: {e}")
+            
+            # Assert that execution completes in reasonable time
+            # The original issue reported 2 hours, so 60 seconds is a reasonable threshold
+            assert elapsed_time < 60, \
+                f"cqlsh took too long ({elapsed_time:.2f}s) to process real WASM UDF. " \
+                f"Expected < 60 seconds. This reproduces the performance issue."
+                
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            cqlshlog.error(f"Test failed after {elapsed_time:.2f} seconds: {e}")
             raise
