@@ -15,7 +15,7 @@
 # limitations under the License.
 from os.path import join, dirname
 
-from .basecase import BaseTestCase, cassandra_dir
+from .basecase import BaseTestCase
 from cqlshlib.cqlhandling import cql_keywords_reserved
 
 RESERVED_KEYWORDS_SOURCE = join(dirname(__file__), 'reserved_keywords.txt')
