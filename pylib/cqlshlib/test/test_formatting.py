@@ -16,7 +16,6 @@
 # limitations under the License.
 
 import os
-import string
 
 from .basecase import BaseTestCase
 from .cassconnect import (get_cassandra_connection, create_keyspace, remove_db, testrun_cqlsh)

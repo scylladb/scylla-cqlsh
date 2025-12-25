@@ -20,7 +20,6 @@ import cmd
 import codecs
 import configparser
 import csv
-import errno
 import getpass
 import optparse
 import os
@@ -134,11 +133,10 @@ from cassandra.cluster import Cluster, EXEC_PROFILE_DEFAULT, ExecutionProfile
 from cassandra.connection import UnixSocketEndPoint
 from cassandra.cqltypes import cql_typename
 from cassandra.marshal import int64_unpack
-from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata, protect_name, protect_names, protect_value)
+from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata, protect_name, protect_names)
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
 from cassandra.util import datetime_from_timestamp
-from cassandra.connection import DRIVER_NAME, DRIVER_VERSION
 
 # cqlsh should run correctly when run out of a Cassandra source tree,
 # out of an unpacked Cassandra tarball, and after a proper package install.
