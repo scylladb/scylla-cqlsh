@@ -1,0 +1,83 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - '*-scylla'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all tags
+
+      - name: Get previous tag
+        id: get-prev-tag
+        run: |
+          # Get the current tag
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
+          
+          # Get the previous tag by excluding the current tag and taking the most recent
+          PREV_TAG=$(git tag --list '*-scylla' --sort=-creatordate | grep -v "^${CURRENT_TAG}$" || true | head -n 1)
+          
+          # Check if we found a valid previous tag
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, this is the first tag"
+            echo "prev_tag=" >> $GITHUB_OUTPUT
+            echo "is_first_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+            echo "is_first_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CURRENT_TAG="${{ steps.get-prev-tag.outputs.current_tag }}"
+          PREV_TAG="${{ steps.get-prev-tag.outputs.prev_tag }}"
+          IS_FIRST="${{ steps.get-prev-tag.outputs.is_first_release }}"
+          
+          if [ "$IS_FIRST" = "true" ]; then
+            echo "Generating changelog for first release"
+            CHANGELOG=$(git log --pretty=format:"* %s (%h)" --no-merges --max-count=500)
+            HEADER="## Changes in this release"
+          else
+            echo "Generating changelog from ${PREV_TAG} to ${CURRENT_TAG}"
+            CHANGELOG=$(git log ${PREV_TAG}..${CURRENT_TAG} --pretty=format:"* %s (%h)" --no-merges)
+            HEADER="## Changes since ${PREV_TAG}"
+          fi
+          
+          # Create a properly formatted changelog
+          {
+            echo "${HEADER}"
+            echo ""
+            if [ -z "$CHANGELOG" ]; then
+              echo "No changes found."
+            else
+              echo "${CHANGELOG}"
+            fi
+          } > /tmp/changelog.md
+          
+          cat /tmp/changelog.md
+          
+          # Set output for the release body with a unique delimiter
+          DELIMITER="EOF_$(date +%s%N)"
+          echo "changelog<<${DELIMITER}" >> $GITHUB_OUTPUT
+          cat /tmp/changelog.md >> $GITHUB_OUTPUT
+          echo "${DELIMITER}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.get-prev-tag.outputs.current_tag }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
