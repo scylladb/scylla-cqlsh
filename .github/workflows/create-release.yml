@@ -26,7 +26,7 @@ jobs:
           echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
           
           # Get the previous tag by excluding the current tag and taking the most recent
-          PREV_TAG=$(git tag --list '*-scylla' --sort=-creatordate | grep -v "^${CURRENT_TAG}$" || true | head -n 1)
+          PREV_TAG=$(git tag --list '*-scylla' --sort=-creatordate | grep -v "^${CURRENT_TAG}$" | head -n 1 || true)
           
           # Check if we found a valid previous tag
           if [ -z "$PREV_TAG" ]; then
