@@ -1261,7 +1261,7 @@ class ImportTask(CopyTask):
         if self.error_handler.num_rows_failed:
             self.shell.printerr("Failed to process %d rows; failed rows written to %s" %
                                 (self.error_handler.num_rows_failed,
-                                 self.error_handler.err_file))
+                                 self.error_handler.err_filename))
 
         if not self.all_processes_running():
             self.shell.printerr("{} child process(es) died unexpectedly, aborting"
