@@ -20,8 +20,6 @@ import datetime
 import string
 import os
 import shutil
-import re
-from pathlib import Path
 
 class DebianFilesTemplate(string.Template):
     delimiter = '%'
