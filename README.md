@@ -22,6 +22,32 @@ cqlsh ${SCYLLA_HOST}
 docker run -it scylladb/scylla-cqlsh ${SCYLLA_HOST}
 ```
 
+## Safe Mode
+
+CQLsh includes a safe mode feature that prompts for confirmation before executing dangerous operations like `DROP` and `TRUNCATE` to prevent accidental data loss.
+
+**Enable safe mode:**
+
+```bash
+# Via command line
+cqlsh --safe-mode ${SCYLLA_HOST}
+
+# Via cqlshrc configuration file
+# Add to [ui] section: safe_mode = true
+```
+
+**Example:**
+
+```
+cqlsh> DROP KEYSPACE my_keyspace;
+Are you sure you want to DROP KEYSPACE my_keyspace? [N/y] n
+Operation cancelled.
+```
+
+**Protected operations:** DROP KEYSPACE, DROP TABLE, DROP INDEX, DROP MATERIALIZED VIEW, DROP TYPE, DROP FUNCTION, DROP AGGREGATE, DROP USER, DROP ROLE, DROP SERVICE_LEVEL, DROP TRIGGER, TRUNCATE
+
+**Note:** Safe mode is disabled by default. In non-interactive mode (scripts/pipes), prompts are automatically skipped.
+
 
 
 # Contributing
