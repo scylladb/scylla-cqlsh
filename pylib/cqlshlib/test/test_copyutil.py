@@ -272,6 +272,9 @@ class TestImportTask(CopyTaskTest):
             import_task = ImportTask(shell, self.ks, self.table, self.columns, self.fname, opts, self.protocol_version, self.config_file)
             error_handler = import_task.error_handler
 
+            # Ensure the error handler is using the expected error file name
+            self.assertTrue(error_handler.err_filename.startswith(opts['errfile']))
+
             # Add parse errors to exceed limit
             for i in range(3):
                 parse_error = ImportTaskError('ParseError', 'Invalid format', rows=[['val1', 'val2']], attempts=1, final=True)
@@ -373,7 +376,7 @@ class TestImportTask(CopyTaskTest):
             self.assertTrue(os.path.exists(error_handler.err_filename))
 
             # Verify filename includes process ID to avoid conflicts in multi-process scenarios
-            expected_pattern = rf'test_import\.err\.pid{os.getpid()}$'
+            expected_pattern = f'test_import\\.err\\.pid{os.getpid()}$'
             self.assertRegex(error_handler.err_filename, expected_pattern,
                              f"Error filename should include process ID, got: {error_handler.err_filename}")
 
