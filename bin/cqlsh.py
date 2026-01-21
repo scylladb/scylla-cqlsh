@@ -232,6 +232,8 @@ parser.add_option("--request-timeout", default=DEFAULT_REQUEST_TIMEOUT_SECONDS, 
 parser.add_option("-t", "--tty", action='store_true', dest='tty',
                   help='Force tty mode (command prompt).')
 parser.add_option('-v', action="version", help='Print the current version of cqlsh.')
+parser.add_option("--safe-mode", action='store_true', dest='safe_mode',
+                  help='Prompt for confirmation before executing dangerous operations (DROP, TRUNCATE). Can also be set via cqlshrc [ui] safe_mode.')
 
 # This is a hidden option to suppress the warning when the -p/--password command line option is used.
 # Power users may use this option if they know no other people has access to the system where cqlsh is run or don't care about security.
@@ -460,6 +462,7 @@ class Shell(cmd.Cmd):
                  connect_timeout=DEFAULT_CONNECT_TIMEOUT_SECONDS,
                  is_subshell=False,
                  auth_provider=None,
+                 safe_mode=False,
                  no_compression=False,
                  ):
         cmd.Cmd.__init__(self, completekey=completekey)
@@ -481,6 +484,7 @@ class Shell(cmd.Cmd):
         self.tracing_enabled = tracing_enabled
         self.page_size = self.default_page_size
         self.expand_enabled = expand_enabled
+        self.safe_mode = safe_mode
         if use_conn:
             self.conn = use_conn
         else:
@@ -1093,7 +1097,116 @@ class Shell(cmd.Cmd):
         self.perform_statement(statement)
         self.tracing_enabled = tracing_was_enabled
 
+    def is_dangerous_statement(self, statement):
+        """
+        Check if a statement is dangerous and requires confirmation in safe mode.
+        Dangerous statements include DROP and TRUNCATE operations.
+        """
+        # Normalize whitespace: strip leading/trailing spaces and collapse multiple spaces to single space
+        import re
+        statement_normalized = re.sub(r'\s+', ' ', statement.strip()).upper()
+        
+        dangerous_keywords = [
+            'DROP KEYSPACE',
+            'DROP TABLE',
+            'DROP COLUMNFAMILY',
+            'DROP INDEX',
+            'DROP MATERIALIZED VIEW',
+            'DROP TYPE',
+            'DROP FUNCTION',
+            'DROP AGGREGATE',
+            'DROP USER',
+            'DROP ROLE',
+            'DROP SERVICE_LEVEL',
+            'DROP TRIGGER',
+            'TRUNCATE'
+        ]
+        for keyword in dangerous_keywords:
+            if statement_normalized.startswith(keyword):
+                return True
+        return False
+
+    def extract_operation_target(self, statement):
+        """
+        Extract the target (keyspace/table name) from a dangerous statement for the confirmation prompt.
+        """
+        # Simple extraction - get words after the operation keyword
+        words = statement.strip().split()
+        
+        # Handle TRUNCATE statements (can be "TRUNCATE table" or "TRUNCATE TABLE table")
+        if len(words) >= 2 and words[0].upper() == 'TRUNCATE':
+            if len(words) >= 3 and words[1].upper() == 'TABLE':
+                return words[2].strip(';')
+            else:
+                return words[1].strip(';')
+        
+        # Handle other DROP statements
+        if len(words) >= 3:
+            # Handle "DROP KEYSPACE name", "DROP TABLE name", etc.
+            # Skip "IF EXISTS" if present
+            idx = 2
+            if idx < len(words) and words[idx].upper() == 'IF':
+                idx = 4  # Skip "IF EXISTS"
+            if idx < len(words):
+                return words[idx].strip(';')
+        return ''
+
+    def prompt_for_confirmation(self, statement):
+        """
+        Prompt user for confirmation before executing a dangerous statement.
+        Returns True if user confirms, False otherwise.
+        """
+        if not self.tty:
+            # If not in interactive mode, don't prompt (assume yes for scripts)
+            return True
+        
+        statement_upper = statement.strip().upper()
+        target = self.extract_operation_target(statement)
+        
+        # Determine the operation type
+        if statement_upper.startswith('DROP KEYSPACE'):
+            op_type = 'DROP KEYSPACE'
+        elif statement_upper.startswith('DROP TABLE') or statement_upper.startswith('DROP COLUMNFAMILY'):
+            op_type = 'DROP TABLE'
+        elif statement_upper.startswith('TRUNCATE'):
+            op_type = 'TRUNCATE'
+        else:
+            op_type = statement_upper.split()[0:2]
+            op_type = ' '.join(op_type) if isinstance(op_type, list) else op_type
+        
+        if target:
+            prompt_msg = f"Are you sure you want to {op_type} {target}? [N/y] "
+        else:
+            prompt_msg = f"Are you sure you want to execute this {op_type} statement? [N/y] "
+        
+        try:
+            response = input(prompt_msg).strip().lower()
+            return response in ('y', 'yes')
+        except (KeyboardInterrupt, EOFError):
+            print()  # newline after interrupt
+            return False
+
     def perform_statement(self, statement):
+        """
+        Execute a CQL statement.
+        
+        This method performs the following:
+        1. If safe mode is enabled, checks if the statement is dangerous (DROP/TRUNCATE)
+        2. If dangerous, prompts for user confirmation
+        3. If cancelled or safe mode check fails, prints error and returns False
+        4. Otherwise, executes the statement and handles tracing if enabled
+        
+        Args:
+            statement (str): The CQL statement to execute
+            
+        Returns:
+            bool: True if statement executed successfully, False if cancelled or failed
+        """
+        # Check if safe mode is enabled and statement is dangerous
+        if self.safe_mode and self.is_dangerous_statement(statement):
+            if not self.prompt_for_confirmation(statement):
+                self.printerr("Operation cancelled.")
+                return False
 
         stmt = SimpleStatement(statement, consistency_level=self.consistency_level, serial_consistency_level=self.serial_consistency_level, fetch_size=self.page_size if self.use_paging else None)
         success, future = self.perform_simple_statement(stmt)
@@ -2519,6 +2632,7 @@ def read_options(cmdlineargs, environment):
     optvalues.request_timeout = option_with_default(configs.getint, 'connection', 'request_timeout', DEFAULT_REQUEST_TIMEOUT_SECONDS)
     optvalues.execute = None
     optvalues.insecure_password_without_warning = False
+    optvalues.safe_mode = option_with_default(configs.getboolean, 'ui', 'safe_mode', False)
 
     (options, arguments) = parser.parse_args(cmdlineargs, values=optvalues)
 
@@ -2731,6 +2845,7 @@ def main(options, hostname, port):
                       request_timeout=options.request_timeout,
                       connect_timeout=options.connect_timeout,
                       encoding=options.encoding,
+                      safe_mode=options.safe_mode,
                       auth_provider=authproviderhandling.load_auth_provider(
                           config_file=CONFIG_FILE,
                           cred_file=options.credentials,
