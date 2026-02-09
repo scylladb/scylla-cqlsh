@@ -949,7 +949,26 @@ class Shell(cmd.Cmd):
                     else:
                         line = self.get_input_line(self.prompt)
                     self.statement.write(line)
-                    if self.onecmd(self.statement.getvalue()):
+                    
+                    # Performance optimization for batch mode (reading from file/pipe):
+                    # Avoid calling onecmd() (which parses the entire accumulated statement)
+                    # on every line. For a 32,000-line statement, this was causing O(n²)
+                    # behavior: line 1 parses 1 line, line 2 parses 2 lines, ..., line n
+                    # parses all n lines, for a total of n*(n+1)/2 parse operations.
+                    # 
+                    # Fix: Only parse when we have a complete statement (line ends with ';').
+                    # This reduces from O(n²) to O(n), improving performance from hours to
+                    # sub-second for large WASM UDFs (>1MB). Interactive mode (tty) is
+                    # unaffected as it needs immediate parsing for tab completion.
+                    should_process = True
+                    if not self.tty and not self.single_statement:
+                        # Simple heuristic: only process if line ends with semicolon
+                        # or if we're in a comment block (which may need special handling)
+                        stripped_line = line.rstrip()
+                        if stripped_line and not stripped_line.endswith(';') and not self.in_comment:
+                            should_process = False
+                    
+                    if should_process and self.onecmd(self.statement.getvalue()):
                         self.reset_statement()
                 except EOFError:
                     self.handle_eof()
