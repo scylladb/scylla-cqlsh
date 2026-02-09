@@ -135,57 +135,6 @@ jobs:
           SSL_CERTFILE: ${{ github.workspace }}/pylib/cqlshlib/test/docker/certs/ca-cert.pem
           SSL_VALIDATE: "false"
 
-  # Example 3: CCM-based SSL test (more advanced)
-  integration_test_ccm_ssl:
-    name: Integration Tests (CCM SSL/TLS)
-    if: "contains(github.event.pull_request.labels.*.name, 'test-ssl-ccm')"
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Java (required for CCM)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '11'
-
-      - name: Install Python Dependencies (including CCM)
-        run: |
-          pip install -r ./pylib/requirements.txt
-          ./reloc/build_reloc.sh
-
-      - name: Generate SSL Certificates
-        run: |
-          cd pylib/cqlshlib/test/docker
-          ./generate_certs.sh
-
-      - name: Create CCM Cluster with SSL
-        run: |
-          # This would be done in pytest fixtures in actual implementation
-          # Shown here for workflow illustration
-          
-          ccm create test-ssl-cluster -n 1 --scylla --version unstable/master:latest
-          
-          # Configure SSL in cluster
-          # ccm would need SSL settings in cluster configuration
-          
-          ccm start
-          
-          export CQL_TEST_HOST=127.0.0.1
-          echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
-
-      - name: Run SSL Integration Tests
-        run: |
-          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v
-        env:
-          SSL_CERTFILE: ${{ github.workspace }}/pylib/cqlshlib/test/docker/certs/ca-cert.pem
-
-      - name: Cleanup
-        if: always()
-        run: |
-          ccm remove || true
-
 # Integration into existing workflow:
 # 
 # The jobs above should be added to .github/workflows/build-push.yml
@@ -194,4 +143,3 @@ jobs:
 # Recommended approach:
 # 1. Start with integration_test_scylla_ssl (Docker-based)
 # 2. Add integration_test_cassandra_ssl once Scylla SSL works
-# 3. Add CCM-based tests for more advanced scenarios
