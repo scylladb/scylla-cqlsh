@@ -6,7 +6,7 @@ This implementation provides a foundation for SSL/TLS integration testing in scy
 
 ### 1. Documentation
 - **`SSL_TLS_INTEGRATION_TEST_PLAN.md`**: Comprehensive implementation plan with:
-  - Docker-based implementation approach
+  - Testcontainers-based implementation approach
   - Detailed encryption setup instructions
   - GitHub Actions integration plan
   - Testing strategy and timeline
@@ -28,7 +28,7 @@ This implementation provides a foundation for SSL/TLS integration testing in scy
 ### 4. CI/CD Reference
 - **`.github/workflows/ssl-integration-test-example.yml`**: Example GitHub Actions workflow
   - Shows how to integrate SSL tests into CI
-  - Includes examples for Docker-based approach
+  - Includes examples for testcontainers-based approach
   - Not active by default - reference implementation only
 
 ## Current State
@@ -40,9 +40,10 @@ This implementation provides a foundation for SSL/TLS integration testing in scy
 - Example test structure
 - GitHub Actions reference workflow
 
-⏳ **Not Yet Implemented (Requires Actual SSL Cluster):**
-- SSL-enabled Scylla/Cassandra Docker containers
-- Functional SSL integration tests
+⏳ **Not Yet Implemented (Requires Implementation):**
+- Testcontainers dependency added to requirements
+- ScyllaDB container with SSL configuration
+- Functional SSL integration tests using testcontainers
 - Active GitHub Actions workflows
 
 ## Quick Start
@@ -85,11 +86,11 @@ pytest pylib/cqlshlib/test/test_ssl_integration.py::TestSSLUtilities -v
 
 To complete the SSL integration test implementation:
 
-### Phase 1: Docker-based SSL Testing
-1. Create Scylla Docker configuration with SSL enabled
-2. Implement Docker container startup with certificate mounting
-3. Activate basic SSL connection tests
-4. Add to GitHub Actions workflow
+### Phase 1: Testcontainers Setup
+1. Add `testcontainers` to `pylib/requirements.txt`
+2. Create Scylla SSL configuration file (`scylla-ssl.yaml`)
+3. Implement testcontainers pytest fixture
+4. Create basic SSL connection test
 
 ### Phase 2: Certificate Validation
 1. Implement tests with certificate validation enabled
@@ -98,11 +99,11 @@ To complete the SSL integration test implementation:
 
 ### Phase 3: Advanced Testing
 1. Test different SSL configurations
-2. Test edge cases and error handling
-3. Performance considerations
+2. Test mutual TLS (client certificates)
+3. Test edge cases and error handling
 
 ### Phase 4: Cassandra Compatibility
-1. Replicate SSL tests for Cassandra
+1. Replicate SSL tests for Cassandra using CassandraContainer
 2. Handle Cassandra-specific SSL configuration
 3. Ensure cross-compatibility
 
@@ -110,18 +111,19 @@ To complete the SSL integration test implementation:
 
 Based on the issue requirements:
 
-1. **High Priority**: Docker-based SSL tests for Scylla (aligns with existing CI)
+1. **High Priority**: Testcontainers-based SSL tests for Scylla (modern, maintainable)
 2. **Medium Priority**: Certificate validation and client auth tests
-3. **Medium Priority**: GitHub Actions integration for Scylla SSL
+3. **Medium Priority**: GitHub Actions integration using testcontainers
 4. **Lower Priority**: Cassandra SSL tests (after Scylla works)
 
 ## Testing Approach
 
 ### Minimal Viable Implementation
-Focus on Docker-based approach:
+Focus on testcontainers approach:
 - ✅ Certificate generation (Done)
 - ✅ Python utilities (Done)
-- ⏳ Docker SSL configuration
+- ⏳ Add testcontainers dependency
+- ⏳ Create testcontainers fixtures
 - ⏳ Basic connection tests
 - ⏳ GitHub Actions integration
 
@@ -147,6 +149,8 @@ Add comprehensive testing:
 - **Cassandra SSL Documentation**: https://cassandra.apache.org/doc/latest/cassandra/operating/security.html
 - **cqlsh SSL Handling**: `pylib/cqlshlib/sslhandling.py`
 - **Existing Tests**: `pylib/cqlshlib/test/`
+- **python-testcontainers**: https://testcontainers-python.readthedocs.io/en/latest/
+- **ScyllaContainer**: https://testcontainers-python.readthedocs.io/en/latest/modules/scylla/README.html
 - **GitHub Actions**: `.github/workflows/build-push.yml`
 
 ## Contributing
