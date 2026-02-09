@@ -6,7 +6,7 @@ This implementation provides a foundation for SSL/TLS integration testing in scy
 
 ### 1. Documentation
 - **`SSL_TLS_INTEGRATION_TEST_PLAN.md`**: Comprehensive implementation plan with:
-  - Two implementation approaches (Docker-based and CCM-based)
+  - Docker-based implementation approach
   - Detailed encryption setup instructions
   - GitHub Actions integration plan
   - Testing strategy and timeline
@@ -28,7 +28,7 @@ This implementation provides a foundation for SSL/TLS integration testing in scy
 ### 4. CI/CD Reference
 - **`.github/workflows/ssl-integration-test-example.yml`**: Example GitHub Actions workflow
   - Shows how to integrate SSL tests into CI
-  - Includes examples for Docker-based and CCM-based approaches
+  - Includes examples for Docker-based approach
   - Not active by default - reference implementation only
 
 ## Current State
@@ -42,7 +42,6 @@ This implementation provides a foundation for SSL/TLS integration testing in scy
 
 ⏳ **Not Yet Implemented (Requires Actual SSL Cluster):**
 - SSL-enabled Scylla/Cassandra Docker containers
-- CCM cluster fixtures with SSL
 - Functional SSL integration tests
 - Active GitHub Actions workflows
 
@@ -86,7 +85,7 @@ pytest pylib/cqlshlib/test/test_ssl_integration.py::TestSSLUtilities -v
 
 To complete the SSL integration test implementation:
 
-### Phase 1: Docker-based Basic SSL (Recommended First)
+### Phase 1: Docker-based SSL Testing
 1. Create Scylla Docker configuration with SSL enabled
 2. Implement Docker container startup with certificate mounting
 3. Activate basic SSL connection tests
@@ -97,18 +96,12 @@ To complete the SSL integration test implementation:
 2. Test hostname verification
 3. Test error cases (invalid certs, etc.)
 
-### Phase 3: Client Authentication (Mutual TLS)
-1. Configure cluster for client certificate requirement
-2. Implement mutual TLS tests
-3. Test client certificate validation
+### Phase 3: Advanced Testing
+1. Test different SSL configurations
+2. Test edge cases and error handling
+3. Performance considerations
 
-### Phase 4: CCM-based Advanced Testing
-1. Create CCM fixtures with SSL configuration
-2. Implement advanced test scenarios
-3. Test different SSL configurations
-4. Test edge cases and error handling
-
-### Phase 5: Cassandra Compatibility
+### Phase 4: Cassandra Compatibility
 1. Replicate SSL tests for Cassandra
 2. Handle Cassandra-specific SSL configuration
 3. Ensure cross-compatibility
@@ -120,8 +113,7 @@ Based on the issue requirements:
 1. **High Priority**: Docker-based SSL tests for Scylla (aligns with existing CI)
 2. **Medium Priority**: Certificate validation and client auth tests
 3. **Medium Priority**: GitHub Actions integration for Scylla SSL
-4. **Lower Priority**: CCM-based tests (more complex setup)
-5. **Lower Priority**: Cassandra SSL tests (after Scylla works)
+4. **Lower Priority**: Cassandra SSL tests (after Scylla works)
 
 ## Testing Approach
 
@@ -137,7 +129,6 @@ Focus on Docker-based approach:
 Add comprehensive testing:
 - ⏳ Certificate validation tests
 - ⏳ Client authentication (mutual TLS)
-- ⏳ CCM-based tests
 - ⏳ COPY command tests
 - ⏳ Error handling tests
 - ⏳ Cassandra compatibility

@@ -10,7 +10,7 @@ This document outlines the implementation plan for adding client encryption (SSL
 - **SSL Support**: cqlsh already supports SSL via `--ssl` flag and config file
 - **SSL Handling Module**: `pylib/cqlshlib/sslhandling.py` manages SSL context creation
 - **GitHub Actions**: Two integration test jobs (Scylla and Cassandra) using Docker
-- **Dependencies**: scylla-driver, scylla-ccm support in requirements
+- **Dependencies**: scylla-driver
 
 ### SSL Configuration in cqlsh
 cqlsh supports SSL through:
@@ -27,74 +27,9 @@ cqlsh supports SSL through:
    - `SSL_CERTFILE`
    - `SSL_VERSION`
 
-## Implementation Options
+## Implementation Approach
 
-### Option 1: scylla-ccm Based Approach
-
-#### Description
-Use scylla-ccm (Cassandra Cluster Manager) to create local clusters with SSL/TLS enabled.
-
-#### Advantages
-- More control over cluster configuration
-- Can test both Scylla and Cassandra
-- Easier to configure SSL certificates and encryption settings
-- Better for local development and debugging
-- CCM is already a dependency in `pylib/requirements.txt`
-
-#### Implementation Steps
-
-1. **Create SSL Certificate Generation Utility**
-   - Location: `pylib/cqlshlib/test/ssl_utils.py`
-   - Functions:
-     - `generate_self_signed_cert()`: Generate CA, server, and client certificates
-     - `create_ssl_config_dir()`: Create temporary directory with certificates
-     - `cleanup_ssl_config()`: Remove temporary SSL files
-
-2. **Create CCM Cluster Fixture**
-   - Location: `pylib/cqlshlib/test/conftest.py` (extend existing)
-   - Add pytest fixture: `ccm_cluster_with_ssl`
-   - Responsibilities:
-     - Generate SSL certificates
-     - Create CCM cluster with SSL configuration
-     - Start cluster
-     - Wait for cluster readiness
-     - Yield cluster connection info
-     - Teardown cluster and cleanup certificates
-
-3. **Create SSL Integration Tests**
-   - Location: `pylib/cqlshlib/test/test_ssl_integration.py`
-   - Test cases:
-     - `test_ssl_connection_with_validation()`: Connect with certificate validation
-     - `test_ssl_connection_without_validation()`: Connect with validation disabled
-     - `test_ssl_with_client_auth()`: Mutual TLS (client certificates)
-     - `test_ssl_hostname_verification()`: Test hostname checking
-     - `test_ssl_via_config_file()`: SSL configured via cqlshrc
-     - `test_ssl_via_environment_vars()`: SSL configured via env vars
-     - `test_ssl_copy_command()`: Test COPY command over SSL
-
-4. **CCM Configuration Details**
-   ```python
-   # Example CCM SSL configuration
-   ccm_config = {
-       'client_encryption_options': {
-           'enabled': True,
-           'certificate': '/path/to/server.crt',
-           'keyfile': '/path/to/server.key',
-           'truststore': '/path/to/ca.pem',
-           'require_client_auth': False  # or True for mutual TLS
-       }
-   }
-   ```
-
-#### Challenges
-- Requires Java runtime for CCM
-- More complex setup and teardown
-- May be slower than Docker approach
-- Certificate generation complexity
-
----
-
-### Option 2: Docker-Based Approach
+### Docker-Based Approach
 
 #### Description
 Use Docker containers with pre-configured SSL/TLS settings, similar to existing integration tests.
@@ -142,7 +77,7 @@ Use Docker containers with pre-configured SSL/TLS settings, similar to existing 
 
 4. **Create SSL Integration Tests**
    - Location: `pylib/cqlshlib/test/test_ssl_docker.py`
-   - Test cases (similar to CCM approach):
+   - Test cases:
      - `test_docker_ssl_basic_connection()`
      - `test_docker_ssl_with_validation()`
      - `test_docker_ssl_client_auth()`
@@ -153,24 +88,6 @@ Use Docker containers with pre-configured SSL/TLS settings, similar to existing 
 - Less control over server configuration
 - Certificate management within containers
 - Potential port conflicts in CI
-
----
-
-## Recommended Hybrid Approach
-
-Combine both approaches for comprehensive testing:
-
-### Phase 1: Docker-Based Tests (Quick Win)
-Start with Docker-based tests for immediate value:
-- Faster to implement
-- Integrates easily with existing CI
-- Good for basic SSL functionality testing
-
-### Phase 2: CCM-Based Tests (Comprehensive)
-Add CCM-based tests for advanced scenarios:
-- More control over configuration
-- Better for edge cases and complex scenarios
-- Useful for local development
 
 ## SSL/TLS Encryption Setup Details
 
@@ -371,8 +288,8 @@ integration_test_scylla_ssl:
 
 ## Implementation Timeline
 
-### Minimal Implementation (Suggested)
-Focus on Docker-based approach with basic test coverage:
+### Implementation (3 weeks)
+Focus on Docker-based approach with comprehensive test coverage:
 
 1. **Week 1**: Setup
    - Create certificate generation utilities
@@ -389,19 +306,6 @@ Focus on Docker-based approach with basic test coverage:
    - Test on Scylla and Cassandra
    - Documentation
 
-### Full Implementation
-Add CCM-based tests and comprehensive coverage:
-
-4. **Week 4**: CCM Integration
-   - CCM cluster fixtures
-   - Advanced test scenarios
-   - Client authentication tests
-
-5. **Week 5**: Polish
-   - Edge case testing
-   - Error handling verification
-   - Performance considerations
-
 ## Dependencies
 
 ### Python Packages
@@ -412,8 +316,6 @@ Add CCM-based tests and comprehensive coverage:
 ### External Dependencies
 - OpenSSL (for certificate generation)
 - Docker (for Docker-based tests)
-- Java 8+ (for CCM-based tests)
-- scylla-ccm (already in requirements)
 
 ## Security Considerations
 

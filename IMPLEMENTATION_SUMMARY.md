@@ -12,16 +12,14 @@ This PR provides a complete foundation for SSL/TLS integration testing in scylla
 
 1. **SSL_TLS_INTEGRATION_TEST_PLAN.md** (14KB, 457 lines)
    - Detailed analysis of current SSL support in cqlsh
-   - Two implementation approaches:
-     - **Option 1: scylla-ccm based** - More control, better for local dev
-     - **Option 2: Docker-based** - Faster, CI-friendly (recommended first)
+   - Docker-based implementation approach
    - Complete SSL/TLS encryption setup guide
    - Certificate generation instructions (OpenSSL & Python)
    - Server configuration examples (Scylla & Cassandra)
    - Client configuration examples (cqlshrc & env vars)
    - GitHub Actions integration strategy
    - Testing strategy covering 6 major areas
-   - Implementation timeline (3-5 weeks)
+   - Implementation timeline (3 weeks)
    - Security considerations
 
 2. **SSL_INTEGRATION_TESTS_README.md** (5.7KB)
@@ -75,7 +73,6 @@ This PR provides a complete foundation for SSL/TLS integration testing in scylla
    - Example jobs for:
      - Scylla with SSL (Docker-based)
      - Cassandra with SSL (Docker-based)
-     - CCM-based SSL testing
    - Shows certificate generation in CI
    - Demonstrates cluster startup with SSL
    - Ready to merge into main workflow when clusters are configured
@@ -121,7 +118,6 @@ pylib/cqlshlib/test/test_ssl_integration.py::TestSSLUtilities
 ### What's Next (Requires Additional Work)
 - ⏳ SSL-enabled Scylla Docker configuration
 - ⏳ SSL-enabled Cassandra Docker configuration
-- ⏳ CCM cluster fixtures with SSL
 - ⏳ Functional integration tests
 - ⏳ Active GitHub Actions workflows
 
@@ -164,16 +160,11 @@ def test_my_ssl_feature():
 
 ## 📖 Implementation Plan Summary
 
-### Recommended Approach: Hybrid (Docker First, Then CCM)
+### Docker-Based Implementation (3 weeks)
 
-**Phase 1: Docker-Based Tests (Quick Win - 3 weeks)**
-- Week 1: Docker SSL configuration, certificate deployment
-- Week 2: Basic SSL connection tests, validation tests
-- Week 3: GitHub Actions integration, documentation
-
-**Phase 2: Advanced Testing (2 weeks)**
-- Week 4: CCM integration, client authentication tests
-- Week 5: Edge cases, error handling, polish
+**Week 1**: Docker SSL configuration, certificate deployment
+**Week 2**: Basic SSL connection tests, validation tests  
+**Week 3**: GitHub Actions integration, documentation
 
 ### Testing Strategy (6 Major Areas)
 
