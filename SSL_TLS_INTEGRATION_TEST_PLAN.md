@@ -29,65 +29,72 @@ cqlsh supports SSL through:
 
 ## Implementation Approach
 
-### Docker-Based Approach
+### Testcontainers-Based Approach
 
 #### Description
-Use Docker containers with pre-configured SSL/TLS settings, similar to existing integration tests.
+Use python-testcontainers with the built-in ScyllaContainer class for automated, pytest-integrated SSL/TLS testing.
 
 #### Advantages
-- Faster startup/teardown
-- Consistent with existing CI infrastructure
-- Easier to integrate with GitHub Actions
-- Can use pre-built Docker images with SSL
-- Isolated environment
+- Built-in ScyllaDB support via `ScyllaContainer` class
+- Automatic container lifecycle management (start/cleanup)
+- Native pytest fixture integration
+- Cleaner, more maintainable code than manual Docker
+- Isolated test environments with guaranteed cleanup
+- Port conflict resolution handled automatically
+- Consistent with modern Python testing practices
 
 #### Implementation Steps
 
-1. **Create SSL-Enabled Docker Configuration**
+1. **Add testcontainers Dependency**
+   - Add `testcontainers` to `pylib/requirements.txt`
+   - Package provides `ScyllaContainer` with ScyllaDB defaults
+
+2. **Create SSL Configuration Files**
    - Location: `pylib/cqlshlib/test/docker/`
    - Files:
-     - `docker-compose-ssl.yml`: Docker Compose configuration
-     - `scylla-ssl.yaml`: Scylla configuration with SSL
-     - `cassandra-ssl.yaml`: Cassandra configuration with SSL
-     - `generate_certs.sh`: Script to generate certificates
+     - `scylla-ssl.yaml`: Scylla configuration with SSL enabled
+     - `generate_certs.sh`: Script to generate certificates (already exists)
 
-2. **Docker Compose Configuration Example**
-   ```yaml
-   version: '3.8'
-   services:
-     scylla-ssl:
-       image: scylladb/scylla:latest
-       volumes:
-         - ./ssl-certs:/etc/scylla/ssl:ro
-         - ./scylla-ssl.yaml:/etc/scylla/scylla.yaml:ro
-       command: --cluster-name test-ssl
-       healthcheck:
-         test: ["CMD", "cqlsh", "-e", "SELECT * FROM system.local"]
-         interval: 10s
-         timeout: 5s
-         retries: 30
-   ```
-
-3. **Create SSL Test Helper Module**
-   - Location: `pylib/cqlshlib/test/docker_ssl_helper.py`
-   - Functions:
-     - `setup_docker_ssl_cluster()`: Start Docker container with SSL
-     - `get_ssl_connection_params()`: Return connection parameters
-     - `teardown_docker_ssl_cluster()`: Stop and remove container
+3. **Create Testcontainers Fixture**
+   - Location: `pylib/cqlshlib/test/conftest.py` (extend existing)
+   - Add pytest fixture: `scylla_ssl_container`
+   - Example implementation:
+     ```python
+     from testcontainers.scylla import ScyllaContainer
+     from .ssl_utils import generate_ssl_certificates
+     
+     @pytest.fixture(scope='module')
+     def scylla_ssl_container():
+         # Generate SSL certificates
+         certs = generate_ssl_certificates()
+         
+         # Create ScyllaDB container with SSL configuration
+         container = ScyllaContainer("scylladb/scylla:latest")
+         container.with_volume_mapping(certs['cert_dir'], "/etc/scylla/ssl", mode="ro")
+         container.with_volume_mapping("./scylla-ssl.yaml", "/etc/scylla/scylla.yaml", mode="ro")
+         
+         with container:
+             # Wait for ScyllaDB to be ready
+             container.get_connection_url()  # Validates connectivity
+             yield container
+     ```
 
 4. **Create SSL Integration Tests**
-   - Location: `pylib/cqlshlib/test/test_ssl_docker.py`
-   - Test cases:
-     - `test_docker_ssl_basic_connection()`
-     - `test_docker_ssl_with_validation()`
-     - `test_docker_ssl_client_auth()`
-     - `test_docker_ssl_cqlshrc_config()`
+   - Location: `pylib/cqlshlib/test/test_ssl_integration.py` (extend existing)
+   - Test cases using the fixture:
+     - `test_ssl_basic_connection(scylla_ssl_container)`
+     - `test_ssl_with_validation(scylla_ssl_container)`
+     - `test_ssl_client_auth(scylla_ssl_container)`
+     - `test_ssl_cqlshrc_config(scylla_ssl_container)`
+     - `test_ssl_copy_command(scylla_ssl_container)`
 
-#### Challenges
-- Need to build custom Docker images or configure at runtime
-- Less control over server configuration
-- Certificate management within containers
-- Potential port conflicts in CI
+#### Advantages Over Manual Docker
+- No need for docker-compose files
+- Automatic port mapping and conflict resolution
+- Better integration with pytest lifecycle
+- Cleaner test code with context managers
+- Container cleanup guaranteed even on test failures
+- Simplified CI/CD integration
 
 ## SSL/TLS Encryption Setup Details
 
@@ -191,62 +198,48 @@ usercert = /path/to/client-cert.pem
 
 ### New Workflow Jobs
 
-Add three new jobs to `.github/workflows/build-push.yml`:
+Add jobs to `.github/workflows/build-push.yml` using testcontainers:
 
 1. **integration_test_scylla_ssl**
-   - Start Scylla with SSL enabled
+   - Use testcontainers for ScyllaDB with SSL
    - Run SSL-specific tests
-   - Use Docker approach for speed
+   - Automatic container lifecycle management
 
 2. **integration_test_cassandra_ssl**
-   - Start Cassandra with SSL enabled
+   - Use testcontainers for Cassandra with SSL
    - Run SSL-specific tests
    - Ensure compatibility
-
-3. **integration_test_enterprise_ssl** (Optional)
-   - Test with Scylla Enterprise if available
-   - May require different certificate configuration
 
 ### Example Workflow Addition
 
 ```yaml
 integration_test_scylla_ssl:
-  name: Integration Tests (Scylla SSL/TLS)
+  name: Integration Tests (Scylla SSL/TLS with Testcontainers)
   if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
 
-    - name: Generate SSL Certificates
-      run: |
-        mkdir -p ssl-certs
-        cd ssl-certs
-        # Certificate generation script
-        ../pylib/cqlshlib/test/docker/generate_certs.sh
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-    - name: Start Scylla with SSL
-      run: |
-        docker run -d \
-          -v $(pwd)/ssl-certs:/etc/scylla/ssl:ro \
-          -v $(pwd)/pylib/cqlshlib/test/docker/scylla-ssl.yaml:/etc/scylla/scylla.yaml:ro \
-          --name scylla-ssl \
-          scylladb/scylla:latest --cluster-name test-ssl
-        
-        # Wait for SSL port
-        export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' scylla-ssl)
-        while ! openssl s_client -connect ${CQL_TEST_HOST}:9042 </dev/null 2>/dev/null; do
-          sleep 1
-        done
-        echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
-
-    - name: Run SSL Tests
+    - name: Install Dependencies
       run: |
         pip install -r ./pylib/requirements.txt
         ./reloc/build_reloc.sh
-        pytest ./pylib/cqlshlib/test/test_ssl*.py -v
+
+    - name: Run SSL Integration Tests
+      run: |
+        # Testcontainers handles container lifecycle automatically
+        pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
       env:
-        SSL_CERTFILE: ssl-certs/ca-cert.pem
+        # Testcontainers will use Docker automatically
+        DOCKER_HOST: unix:///var/run/docker.sock
 ```
+
+**Note**: Testcontainers eliminates the need for manual Docker commands, certificate mounting, and container cleanup. All of this is handled by the pytest fixtures.
 
 ## Testing Strategy
 
@@ -289,33 +282,34 @@ integration_test_scylla_ssl:
 ## Implementation Timeline
 
 ### Implementation (3 weeks)
-Focus on Docker-based approach with comprehensive test coverage:
+Focus on testcontainers-based approach with comprehensive test coverage:
 
 1. **Week 1**: Setup
+   - Add testcontainers to dependencies
    - Create certificate generation utilities
-   - Create Docker SSL configuration
-   - Set up test fixtures
+   - Create Scylla SSL configuration file
+   - Set up testcontainers pytest fixtures
 
 2. **Week 2**: Core Tests
-   - Implement basic SSL connection tests
+   - Implement basic SSL connection tests with testcontainers
    - Test certificate validation
-   - Test configuration methods
+   - Test configuration methods (cqlshrc, env vars, CLI flags)
 
 3. **Week 3**: CI Integration
-   - Add GitHub Actions workflows
+   - Add GitHub Actions workflows using testcontainers
    - Test on Scylla and Cassandra
-   - Documentation
+   - Documentation and polish
 
 ## Dependencies
 
 ### Python Packages
-- `cryptography`: For certificate generation (add to pylib/requirements.txt)
-- `pytest-docker`: Optional, for better Docker integration
-- `pyOpenSSL`: Alternative for SSL utilities
+- `testcontainers`: For ScyllaDB/Cassandra container management (add to pylib/requirements.txt)
+- `cryptography`: Optional, for advanced certificate generation
+- Existing: `scylla-driver`, `pytest`
 
 ### External Dependencies
-- OpenSSL (for certificate generation)
-- Docker (for Docker-based tests)
+- OpenSSL (for certificate generation via bash script)
+- Docker (automatically used by testcontainers)
 
 ## Security Considerations
 
@@ -349,11 +343,14 @@ Focus on Docker-based approach with comprehensive test coverage:
 ## Notes
 
 - The existing `sni_proxy` test suite works with SSL/TLS but is configured by python-driver, not by cqlsh directly. This implementation will test cqlsh's SSL handling specifically.
-- Tests should be skipped gracefully if required dependencies (Docker, OpenSSL, etc.) are not available.
-- Consider adding a marker `@pytest.mark.ssl` to easily run/skip SSL tests.
+- Testcontainers automatically handles Docker dependencies and container lifecycle. Tests will be skipped if Docker is not available.
+- The `@pytest.mark.ssl` marker is already configured for SSL tests.
+- Testcontainers provides better isolation and cleanup compared to manual Docker management.
 
 ## References
 
 - Scylla SSL/TLS documentation: https://docs.scylladb.com/stable/operating-scylla/security/client-node-encryption.html
 - Cassandra SSL documentation: https://cassandra.apache.org/doc/latest/cassandra/operating/security.html
 - cqlsh SSL handling: `pylib/cqlshlib/sslhandling.py`
+- python-testcontainers documentation: https://testcontainers-python.readthedocs.io/en/latest/
+- ScyllaContainer documentation: https://testcontainers-python.readthedocs.io/en/latest/modules/scylla/README.html
