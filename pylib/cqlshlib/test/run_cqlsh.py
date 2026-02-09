@@ -319,9 +319,17 @@ def run_cqlsh(**kwargs):
 def call_cqlsh(**kwargs):
     kwargs.setdefault('prompt', None)
     proginput = kwargs.pop('input', '')
+    timeout = kwargs.pop('timeout', None)
+    if timeout is not None:
+        timeout *= basecase.TIMEOUT_SCALE
     kwargs['tty'] = False
     c = CqlshRunner(**kwargs)
-    output, _ = c.proc.communicate(proginput)
+    try:
+        output, _ = c.proc.communicate(proginput, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        c.proc.kill()
+        output, _ = c.proc.communicate()
+        raise AssertionError(f'cqlsh timed out after {timeout}s:\n{output.decode(errors="replace")}')
     result = c.close()
     if isinstance(output, bytes):
         output = output.decode("utf-8")
