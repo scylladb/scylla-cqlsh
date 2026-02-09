@@ -68,9 +68,9 @@ openssl x509 -req -in client-req.pem \
 # Clean up CSR files
 rm -f server-req.pem client-req.pem ca-cert.srl
 
-# Set appropriate permissions
-chmod 644 *.pem
+# Set appropriate permissions (private keys first to avoid exposure)
 chmod 600 *-key.pem
+chmod 644 ca-cert.pem server-cert.pem client-cert.pem
 
 echo "Certificate generation complete!"
 echo ""

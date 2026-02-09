@@ -49,9 +49,13 @@ def ssl_certificates():
     """
     from .ssl_utils import generate_ssl_certificates, cleanup_ssl_files
     
-    cert_paths = generate_ssl_certificates()
-    yield cert_paths
-    cleanup_ssl_files(cert_paths['cert_dir'])
+    cert_paths = None
+    try:
+        cert_paths = generate_ssl_certificates()
+        yield cert_paths
+    finally:
+        if cert_paths is not None:
+            cleanup_ssl_files(cert_paths['cert_dir'])
 
 
 class TestSSLUtilities:
