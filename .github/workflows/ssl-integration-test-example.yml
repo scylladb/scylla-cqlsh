@@ -1,0 +1,197 @@
+# Example GitHub Actions workflow for SSL/TLS integration tests
+# This is a REFERENCE implementation showing how to add SSL tests
+# 
+# To activate, merge relevant parts into .github/workflows/build-push.yml
+# See SSL_TLS_INTEGRATION_TEST_PLAN.md for full implementation details
+
+name: SSL/TLS Integration Tests (Example)
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  # Example 1: Docker-based SSL test with Scylla
+  integration_test_scylla_ssl:
+    name: Integration Tests (Scylla SSL/TLS)
+    # This would run alongside existing tests
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SSL Certificates
+        run: |
+          cd pylib/cqlshlib/test/docker
+          ./generate_certs.sh
+          ls -la certs/
+
+      - name: Create Scylla SSL Configuration
+        run: |
+          # This is a placeholder - actual implementation would:
+          # 1. Create scylla.yaml with SSL settings
+          # 2. Configure client_encryption_options
+          # 3. Point to generated certificates
+          
+          cat > /tmp/scylla-ssl.yaml << 'EOF'
+          client_encryption_options:
+            enabled: true
+            certificate: /etc/scylla/ssl/server-cert.pem
+            keyfile: /etc/scylla/ssl/server-key.pem
+            truststore: /etc/scylla/ssl/ca-cert.pem
+            require_client_auth: false
+          EOF
+
+      - name: Start Scylla with SSL
+        run: |
+          # Start Scylla with SSL configuration
+          # Note: This is simplified - actual implementation needs proper volume mounts
+          
+          export DOCKER_ID=$(docker run -d \
+            -v $(pwd)/pylib/cqlshlib/test/docker/certs:/etc/scylla/ssl:ro \
+            scylladb/scylla:latest --cluster-name test-ssl)
+          
+          export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+          
+          # Wait for Scylla to start with SSL on port 9142 (or 9042 if SSL is default)
+          timeout 300 bash -c "until nc -z ${CQL_TEST_HOST} 9042; do sleep 1; done"
+          
+          echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
+          echo "Scylla started with SSL at ${CQL_TEST_HOST}"
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r ./pylib/requirements.txt
+          ./reloc/build_reloc.sh
+
+      - name: Run SSL Integration Tests
+        run: |
+          # Run only SSL-specific tests
+          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+        env:
+          # SSL environment variables
+          SSL_CERTFILE: ${{ github.workspace }}/pylib/cqlshlib/test/docker/certs/ca-cert.pem
+          SSL_VALIDATE: "false"  # Start with basic SSL, no validation
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop ${DOCKER_ID} || true
+          docker rm ${DOCKER_ID} || true
+
+  # Example 2: Docker-based SSL test with Cassandra
+  integration_test_cassandra_ssl:
+    name: Integration Tests (Cassandra SSL/TLS)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SSL Certificates
+        run: |
+          cd pylib/cqlshlib/test/docker
+          ./generate_certs.sh
+
+      - name: Create Cassandra SSL Configuration
+        run: |
+          # Cassandra uses different SSL configuration
+          # Would need to create keystore/truststore or use PEM files depending on version
+          
+          # This is a placeholder showing the concept
+          echo "Cassandra SSL configuration would go here"
+          # Actual implementation in SSL_TLS_INTEGRATION_TEST_PLAN.md
+
+      - name: Start Cassandra with SSL
+        run: |
+          # Similar to Scylla but with Cassandra-specific configuration
+          export DOCKER_ID=$(docker run -d \
+            -e CASSANDRA_CLUSTER_NAME=test-ssl \
+            cassandra:5.0)
+          
+          export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+          
+          timeout 300 bash -c "until nc -z ${CQL_TEST_HOST} 9042; do sleep 1; done"
+          
+          echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r ./pylib/requirements.txt
+          ./reloc/build_reloc.sh
+
+      - name: Run SSL Integration Tests
+        run: |
+          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+        env:
+          SSL_CERTFILE: ${{ github.workspace }}/pylib/cqlshlib/test/docker/certs/ca-cert.pem
+          SSL_VALIDATE: "false"
+
+  # Example 3: CCM-based SSL test (more advanced)
+  integration_test_ccm_ssl:
+    name: Integration Tests (CCM SSL/TLS)
+    if: "contains(github.event.pull_request.labels.*.name, 'test-ssl-ccm')"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Java (required for CCM)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Install Python Dependencies (including CCM)
+        run: |
+          pip install -r ./pylib/requirements.txt
+          ./reloc/build_reloc.sh
+
+      - name: Generate SSL Certificates
+        run: |
+          cd pylib/cqlshlib/test/docker
+          ./generate_certs.sh
+
+      - name: Create CCM Cluster with SSL
+        run: |
+          # This would be done in pytest fixtures in actual implementation
+          # Shown here for workflow illustration
+          
+          ccm create test-ssl-cluster -n 1 --scylla --version unstable/master:latest
+          
+          # Configure SSL in cluster
+          # ccm would need SSL settings in cluster configuration
+          
+          ccm start
+          
+          export CQL_TEST_HOST=127.0.0.1
+          echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
+
+      - name: Run SSL Integration Tests
+        run: |
+          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v
+        env:
+          SSL_CERTFILE: ${{ github.workspace }}/pylib/cqlshlib/test/docker/certs/ca-cert.pem
+
+      - name: Cleanup
+        if: always()
+        run: |
+          ccm remove || true
+
+# Integration into existing workflow:
+# 
+# The jobs above should be added to .github/workflows/build-push.yml
+# They can run in parallel with existing integration tests
+# 
+# Recommended approach:
+# 1. Start with integration_test_scylla_ssl (Docker-based)
+# 2. Add integration_test_cassandra_ssl once Scylla SSL works
+# 3. Add CCM-based tests for more advanced scenarios
