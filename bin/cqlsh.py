@@ -391,6 +391,27 @@ class FormatError(DecodeError):
     verb = 'format'
 
 
+LITERAL_OPENERS = re.compile(r"'|\"|\$\$|/\*|--|//")
+
+
+def open_literal_after(line, closer=None):
+    """
+    Return the delimiter that still has to close at the end of line ("'", '"', '$$' or '*/'),
+    or None; closer is what was still open before line.
+    """
+    i = 0
+    while True:
+        if closer:
+            j = line.find(closer, i)
+            if j < 0:
+                return closer
+            i, closer = j + len(closer), None
+        m = LITERAL_OPENERS.search(line, i)
+        if not m or m.group() in ('--', '//'):
+            return None
+        closer, i = ('*/' if m.group() == '/*' else m.group()), m.end()
+
+
 def full_cql_version(ver):
     while ver.count('.') < 2:
         ver += '.0'
@@ -592,6 +613,7 @@ class Shell(cmd.Cmd):
 
         self.statement = StringIO()
         self.lineno = 1
+        self.open_literal = None
 
         self.prompt = ''
         if stdin is None:
@@ -893,6 +915,7 @@ class Shell(cmd.Cmd):
         self.statement.truncate(0)
         self.statement.seek(0)
         self.empty_lines = 0
+        self.open_literal = None
 
     def reset_prompt(self):
         if self.current_keyspace is None:
@@ -992,7 +1015,14 @@ class Shell(cmd.Cmd):
                     else:
                         line = self.get_input_line(self.prompt)
                     self.statement.write(line)
-                    if self.onecmd(self.statement.getvalue()):
+                    # Re-parsing the whole buffer after every line is O(n^2) for a large
+                    # multi-line string literal (a 1MB WASM UDF took hours). A line wholly
+                    # inside a literal can neither complete the statement nor hold a lexing
+                    # error, so skip the parse for it; every other line is parsed as before.
+                    inside_literal = self.open_literal in ("'", '"', '$$') and self.open_literal not in line
+                    self.open_literal = open_literal_after(line, self.open_literal)
+                    if (self.tty or self.single_statement or not inside_literal) \
+                            and self.onecmd(self.statement.getvalue()):
                         self.reset_statement()
                 except EOFError:
                     self.handle_eof()
@@ -1045,6 +1075,7 @@ class Shell(cmd.Cmd):
         if open_comment is not None:
             self.reset_statement()
             self.statement.write(open_comment)
+            self.open_literal = '*/'
             self.set_continue_prompt()
             return
         return True
