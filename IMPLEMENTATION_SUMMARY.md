@@ -12,12 +12,12 @@ This PR provides a complete foundation for SSL/TLS integration testing in scylla
 
 1. **SSL_TLS_INTEGRATION_TEST_PLAN.md** (14KB, 457 lines)
    - Detailed analysis of current SSL support in cqlsh
-   - Docker-based implementation approach
+   - Testcontainers-based implementation approach
    - Complete SSL/TLS encryption setup guide
    - Certificate generation instructions (OpenSSL & Python)
    - Server configuration examples (Scylla & Cassandra)
    - Client configuration examples (cqlshrc & env vars)
-   - GitHub Actions integration strategy
+   - GitHub Actions integration strategy using testcontainers
    - Testing strategy covering 6 major areas
    - Implementation timeline (3 weeks)
    - Security considerations
@@ -71,11 +71,11 @@ This PR provides a complete foundation for SSL/TLS integration testing in scylla
 **'.github/workflows/ssl-integration-test-example.yml'** (6.7KB)
    - Reference implementation (not active)
    - Example jobs for:
-     - Scylla with SSL (Docker-based)
-     - Cassandra with SSL (Docker-based)
-   - Shows certificate generation in CI
-   - Demonstrates cluster startup with SSL
-   - Ready to merge into main workflow when clusters are configured
+     - Scylla with SSL (testcontainers-based)
+     - Cassandra with SSL (testcontainers-based)
+   - Shows testcontainers usage in CI
+   - Demonstrates automated container lifecycle
+   - Ready to merge into main workflow when implementation is complete
 
 ## ✅ Verification Completed
 
@@ -116,10 +116,11 @@ pylib/cqlshlib/test/test_ssl_integration.py::TestSSLUtilities
 - ✅ Comprehensive documentation
 
 ### What's Next (Requires Additional Work)
-- ⏳ SSL-enabled Scylla Docker configuration
-- ⏳ SSL-enabled Cassandra Docker configuration
-- ⏳ Functional integration tests
-- ⏳ Active GitHub Actions workflows
+- ⏳ Add testcontainers to pylib/requirements.txt
+- ⏳ Create ScyllaDB SSL configuration file
+- ⏳ Implement testcontainers pytest fixtures
+- ⏳ Functional integration tests using testcontainers
+- ⏳ Active GitHub Actions workflows with testcontainers
 
 ## 📚 How to Use
 
@@ -160,11 +161,11 @@ def test_my_ssl_feature():
 
 ## 📖 Implementation Plan Summary
 
-### Docker-Based Implementation (3 weeks)
+### Testcontainers-Based Implementation (3 weeks)
 
-**Week 1**: Docker SSL configuration, certificate deployment
-**Week 2**: Basic SSL connection tests, validation tests  
-**Week 3**: GitHub Actions integration, documentation
+**Week 1**: Testcontainers setup, certificate utilities, SSL configuration
+**Week 2**: Basic SSL connection tests with testcontainers, validation tests  
+**Week 3**: GitHub Actions integration using testcontainers, documentation
 
 ### Testing Strategy (6 Major Areas)
 
