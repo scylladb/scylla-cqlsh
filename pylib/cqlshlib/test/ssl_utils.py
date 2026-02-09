@@ -226,6 +226,8 @@ class SSLTestContext:
         self.cert_paths = generate_ssl_certificates()
         self._temp_dirs.append(self.cert_paths['cert_dir'])
         
+        # Create cqlshrc in a temp file (not in a directory we need to track)
+        # The file is created by tempfile.mkstemp which creates it in the system temp dir
         self.cqlshrc_path = create_cqlshrc_ssl_config(
             self.cert_paths,
             validate=self.validate,
