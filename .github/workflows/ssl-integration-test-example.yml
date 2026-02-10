@@ -1,0 +1,95 @@
+# Example GitHub Actions workflow for SSL/TLS integration tests using Testcontainers
+# This is a REFERENCE implementation showing how to add SSL tests
+# 
+# To activate, merge relevant parts into .github/workflows/build-push.yml
+# See SSL_TLS_INTEGRATION_TEST_PLAN.md for full implementation details
+
+name: SSL/TLS Integration Tests with Testcontainers (Example)
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  # Example: Testcontainers-based SSL test with Scylla
+  integration_test_scylla_ssl:
+    name: Integration Tests (Scylla SSL/TLS with Testcontainers)
+    # This would run alongside existing tests
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r ./pylib/requirements.txt
+          # Note: testcontainers should be added to requirements.txt
+          ./reloc/build_reloc.sh
+
+      - name: Run SSL Integration Tests
+        run: |
+          # Testcontainers handles all container lifecycle automatically:
+          # - Pulls ScyllaDB image
+          # - Starts container with SSL configuration
+          # - Mounts certificates
+          # - Waits for readiness
+          # - Runs tests
+          # - Cleans up containers
+          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+        env:
+          # Docker is used by testcontainers automatically
+          DOCKER_HOST: unix:///var/run/docker.sock
+
+  # Example: Testcontainers-based SSL test with Cassandra
+  integration_test_cassandra_ssl:
+    name: Integration Tests (Cassandra SSL/TLS with Testcontainers)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r ./pylib/requirements.txt
+          ./reloc/build_reloc.sh
+
+      - name: Run SSL Integration Tests
+        run: |
+          # Testcontainers can also use CassandraContainer for Cassandra testing
+          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+
+# Benefits of Testcontainers Approach:
+# 
+# 1. No manual Docker commands needed
+# 2. Automatic container lifecycle (start, health check, cleanup)
+# 3. Better pytest integration with fixtures
+# 4. Port conflict resolution handled automatically
+# 5. Cleaner, more maintainable test code
+# 6. Consistent approach across different database types
+#
+# To activate these tests:
+# 1. Add testcontainers to pylib/requirements.txt
+# 2. Implement testcontainers fixtures in conftest.py
+# 3. Update test_ssl_integration.py to use the fixtures
+# 4. Merge this workflow into .github/workflows/build-push.yml

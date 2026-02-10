@@ -7,6 +7,22 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+ssl-test = [
+    "pytest>=7.0",
+    "testcontainers>=3.0",
+    "cryptography>=41.0",
+]
+
 [tool.setuptools_scm]
 write_to = "pylib/cqlshlib/_version.py"
 tag_regex = '^(?P<prefix>v)?(?P<version>[^\+-]+)(?P<suffix>-scylla)?$'
+
+[tool.pytest.ini_options]
+markers = [
+    "ssl: SSL/TLS integration tests (requires SSL-enabled cluster)",
+]
