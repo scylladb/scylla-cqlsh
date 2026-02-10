@@ -18,7 +18,7 @@
 SSL/TLS utilities for integration testing.
 
 This module provides utilities for:
-- Generating test SSL certificates
+- Generating test SSL certificates (pure Python or via bash script)
 - Managing SSL test fixtures
 - Configuring cqlsh for SSL connections
 """
@@ -26,13 +26,26 @@ This module provides utilities for:
 import os
 import tempfile
 import shutil
+import subprocess
+import datetime
+import ipaddress
 from pathlib import Path
 from typing import Optional, Dict
 
+try:
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID, ExtensionOID
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.backends import default_backend
+    HAS_CRYPTOGRAPHY = True
+except ImportError:
+    HAS_CRYPTOGRAPHY = False
 
-def generate_ssl_certificates(output_dir: Optional[str] = None) -> Dict[str, str]:
+
+def generate_ssl_certificates_python(output_dir: Optional[str] = None) -> Dict[str, str]:
     """
-    Generate SSL/TLS certificates for testing using OpenSSL command-line tool.
+    Generate SSL/TLS certificates for testing using pure Python (cryptography package).
     
     Creates:
     - CA certificate and private key
@@ -43,22 +56,19 @@ def generate_ssl_certificates(output_dir: Optional[str] = None) -> Dict[str, str
         output_dir: Directory to store certificates. If None, creates a temp directory.
     
     Returns:
-        Dictionary with paths to generated certificates:
-        {
-            'ca_cert': 'path/to/ca-cert.pem',
-            'ca_key': 'path/to/ca-key.pem',
-            'server_cert': 'path/to/server-cert.pem',
-            'server_key': 'path/to/server-key.pem',
-            'client_cert': 'path/to/client-cert.pem',
-            'client_key': 'path/to/client-key.pem',
-            'cert_dir': 'path/to/cert/directory'
-        }
+        Dictionary with paths to generated certificates
+    
+    Raises:
+        ImportError: If cryptography package is not available
     
     Note:
         These certificates are for TESTING ONLY and should never be used in production.
-        They are self-signed and use weak security parameters for simplicity.
     """
-    import subprocess
+    if not HAS_CRYPTOGRAPHY:
+        raise ImportError(
+            "cryptography package is required for pure Python certificate generation. "
+            "Install it with: pip install cryptography"
+        )
     
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='cqlsh_ssl_test_')
@@ -67,53 +77,121 @@ def generate_ssl_certificates(output_dir: Optional[str] = None) -> Dict[str, str
     
     cert_dir = Path(output_dir)
     
-    # Generate CA certificate
-    subprocess.run([
-        'openssl', 'req', '-new', '-x509', '-nodes', '-days', '365',
-        '-keyout', str(cert_dir / 'ca-key.pem'),
-        '-out', str(cert_dir / 'ca-cert.pem'),
-        '-subj', '/CN=Test CA/O=ScyllaDB Testing/C=US'
-    ], check=True, capture_output=True)
+    # Generate CA
+    ca_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
+    
+    ca_name = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ScyllaDB Testing"),
+        x509.NameAttribute(NameOID.COMMON_NAME, "Test CA"),
+    ])
+    
+    ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True
+        )
+        .sign(ca_key, hashes.SHA256(), backend=default_backend())
+    )
+    
+    # Write CA files
+    with open(cert_dir / 'ca-key.pem', 'wb') as f:
+        f.write(ca_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        ))
+    
+    with open(cert_dir / 'ca-cert.pem', 'wb') as f:
+        f.write(ca_cert.public_bytes(serialization.Encoding.PEM))
     
     # Generate server certificate
-    subprocess.run([
-        'openssl', 'req', '-new', '-nodes', '-days', '365',
-        '-keyout', str(cert_dir / 'server-key.pem'),
-        '-out', str(cert_dir / 'server-req.pem'),
-        '-subj', '/CN=localhost/O=ScyllaDB Testing/C=US'
-    ], check=True, capture_output=True)
+    server_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
     
-    subprocess.run([
-        'openssl', 'x509', '-req',
-        '-in', str(cert_dir / 'server-req.pem'),
-        '-CA', str(cert_dir / 'ca-cert.pem'),
-        '-CAkey', str(cert_dir / 'ca-key.pem'),
-        '-CAcreateserial', '-days', '365',
-        '-out', str(cert_dir / 'server-cert.pem')
-    ], check=True, capture_output=True)
+    server_name = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ScyllaDB Testing"),
+        x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+    ])
+    
+    server_cert = (
+        x509.CertificateBuilder()
+        .subject_name(server_name)
+        .issuer_name(ca_name)
+        .public_key(server_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+        .add_extension(
+            x509.SubjectAlternativeName([
+                x509.DNSName("localhost"),
+                x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+            ]),
+            critical=False
+        )
+        .sign(ca_key, hashes.SHA256(), backend=default_backend())
+    )
+    
+    # Write server files
+    with open(cert_dir / 'server-key.pem', 'wb') as f:
+        f.write(server_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        ))
+    
+    with open(cert_dir / 'server-cert.pem', 'wb') as f:
+        f.write(server_cert.public_bytes(serialization.Encoding.PEM))
     
     # Generate client certificate
-    subprocess.run([
-        'openssl', 'req', '-new', '-nodes', '-days', '365',
-        '-keyout', str(cert_dir / 'client-key.pem'),
-        '-out', str(cert_dir / 'client-req.pem'),
-        '-subj', '/CN=test-client/O=ScyllaDB Testing/C=US'
-    ], check=True, capture_output=True)
+    client_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
     
-    subprocess.run([
-        'openssl', 'x509', '-req',
-        '-in', str(cert_dir / 'client-req.pem'),
-        '-CA', str(cert_dir / 'ca-cert.pem'),
-        '-CAkey', str(cert_dir / 'ca-key.pem'),
-        '-CAcreateserial', '-days', '365',
-        '-out', str(cert_dir / 'client-cert.pem')
-    ], check=True, capture_output=True)
+    client_name = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ScyllaDB Testing"),
+        x509.NameAttribute(NameOID.COMMON_NAME, "test-client"),
+    ])
     
-    # Clean up CSR files
-    (cert_dir / 'server-req.pem').unlink()
-    (cert_dir / 'client-req.pem').unlink()
-    if (cert_dir / 'ca-cert.srl').exists():
-        (cert_dir / 'ca-cert.srl').unlink()
+    client_cert = (
+        x509.CertificateBuilder()
+        .subject_name(client_name)
+        .issuer_name(ca_name)
+        .public_key(client_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+        .sign(ca_key, hashes.SHA256(), backend=default_backend())
+    )
+    
+    # Write client files
+    with open(cert_dir / 'client-key.pem', 'wb') as f:
+        f.write(client_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        ))
+    
+    with open(cert_dir / 'client-cert.pem', 'wb') as f:
+        f.write(client_cert.public_bytes(serialization.Encoding.PEM))
     
     # Set permissions
     os.chmod(cert_dir / 'ca-key.pem', 0o600)
@@ -129,6 +207,112 @@ def generate_ssl_certificates(output_dir: Optional[str] = None) -> Dict[str, str
         'client_key': str(cert_dir / 'client-key.pem'),
         'cert_dir': str(cert_dir)
     }
+
+
+def generate_ssl_certificates_bash(output_dir: Optional[str] = None) -> Dict[str, str]:
+    """
+    Generate SSL/TLS certificates for testing by calling the bash script.
+    
+    Creates:
+    - CA certificate and private key
+    - Server certificate and private key (signed by CA)
+    - Client certificate and private key (signed by CA, for mutual TLS)
+    
+    Args:
+        output_dir: Directory to store certificates. If None, creates a temp directory.
+    
+    Returns:
+        Dictionary with paths to generated certificates
+    
+    Note:
+        These certificates are for TESTING ONLY and should never be used in production.
+    """
+    if output_dir is None:
+        output_dir = tempfile.mkdtemp(prefix='cqlsh_ssl_test_')
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+    
+    cert_dir = Path(output_dir)
+    
+    # Find the generate_certs.sh script
+    script_dir = Path(__file__).parent / 'docker'
+    script_path = script_dir / 'generate_certs.sh'
+    
+    if not script_path.exists():
+        raise FileNotFoundError(f"Certificate generation script not found at {script_path}")
+    
+    # Run the script with the output directory
+    env = os.environ.copy()
+    env['CERT_DIR'] = str(cert_dir)
+    
+    result = subprocess.run(
+        [str(script_path)],
+        env=env,
+        cwd=str(cert_dir),
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    
+    return {
+        'ca_cert': str(cert_dir / 'ca-cert.pem'),
+        'ca_key': str(cert_dir / 'ca-key.pem'),
+        'server_cert': str(cert_dir / 'server-cert.pem'),
+        'server_key': str(cert_dir / 'server-key.pem'),
+        'client_cert': str(cert_dir / 'client-cert.pem'),
+        'client_key': str(cert_dir / 'client-key.pem'),
+        'cert_dir': str(cert_dir)
+    }
+
+
+def generate_ssl_certificates(output_dir: Optional[str] = None, method: str = 'auto') -> Dict[str, str]:
+    """
+    Generate SSL/TLS certificates for testing.
+    
+    Creates:
+    - CA certificate and private key
+    - Server certificate and private key (signed by CA)
+    - Client certificate and private key (signed by CA, for mutual TLS)
+    
+    Args:
+        output_dir: Directory to store certificates. If None, creates a temp directory.
+        method: Certificate generation method:
+            - 'auto': Try pure Python first, fall back to bash if cryptography unavailable
+            - 'python': Use pure Python (requires cryptography package)
+            - 'bash': Use bash script (requires openssl command)
+    
+    Returns:
+        Dictionary with paths to generated certificates:
+        {
+            'ca_cert': 'path/to/ca-cert.pem',
+            'ca_key': 'path/to/ca-key.pem',
+            'server_cert': 'path/to/server-cert.pem',
+            'server_key': 'path/to/server-key.pem',
+            'client_cert': 'path/to/client-cert.pem',
+            'client_key': 'path/to/client-key.pem',
+            'cert_dir': 'path/to/cert/directory'
+        }
+    
+    Raises:
+        ImportError: If method='python' and cryptography is not available
+        FileNotFoundError: If method='bash' and script is not found
+    
+    Note:
+        These certificates are for TESTING ONLY and should never be used in production.
+        They are self-signed and use weak security parameters for simplicity.
+    """
+    if method == 'python':
+        return generate_ssl_certificates_python(output_dir)
+    elif method == 'bash':
+        return generate_ssl_certificates_bash(output_dir)
+    elif method == 'auto':
+        # Try Python first, fall back to bash
+        if HAS_CRYPTOGRAPHY:
+            return generate_ssl_certificates_python(output_dir)
+        else:
+            return generate_ssl_certificates_bash(output_dir)
+    else:
+        raise ValueError(f"Invalid method: {method}. Must be 'auto', 'python', or 'bash'")
 
 
 def create_cqlshrc_ssl_config(cert_paths: Dict[str, str], 
