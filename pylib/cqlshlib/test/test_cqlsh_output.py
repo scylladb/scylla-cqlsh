@@ -45,7 +45,8 @@ def _normalize_response(response):
             if col in line:
                 return False
         ignore_options = ["paxos_grace_seconds", "tombstone_gc", "cdc",
-                          "allow_auto_snapshot", "incremental_backups" # cassandra 5.0 one we don't care about
+                          "allow_auto_snapshot", "incremental_backups", # cassandra 5.0 one we don't care about
+                          "compression", "expired_sstable_check_frequency_seconds" # ScyllaDB changed default compressor
                           ]
         for col in ignore_options:
             if col in line:
@@ -1050,7 +1051,6 @@ class TestCqlshOutput(BaseTestCase):
             AND caching = {{'keys': 'ALL', 'rows_per_partition': 'ALL'}}
             AND comment = ''
             AND compaction = {{'class': '{self.default_compaction_strategy}'}}
-            AND compression = {{'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}}
             AND crc_check_chance = 1.0
             AND dclocal_read_repair_chance = 0.0
             AND default_time_to_live = 0
