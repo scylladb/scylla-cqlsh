@@ -46,7 +46,7 @@ def _normalize_response(response):
                 return False
         ignore_options = ["paxos_grace_seconds", "tombstone_gc", "cdc",
                           "allow_auto_snapshot", "incremental_backups", # cassandra 5.0 one we don't care about
-                          "compression", "expired_sstable_check_frequency_seconds" # ScyllaDB changed default compressor
+                          "compression", "expired_sstable_check_frequency_seconds" # ScyllaDB version-specific fields
                           ]
         for col in ignore_options:
             if col in line:
