@@ -95,39 +95,132 @@ def scylla_ssl_container(ssl_certificates):
     Note:
         Requires testcontainers package and Docker
     """
-    pytest.skip("Testcontainers integration pending - see docs/plans/SSL_TLS_INTEGRATION_TEST_PLAN.md")
+    try:
+        from testcontainers.core.container import DockerContainer
+        from testcontainers.core.waiting_strategies import wait_for_logs
+        import time
+    except ImportError:
+        pytest.skip("testcontainers package not available")
     
-    # TODO: Implement testcontainers integration
-    # from testcontainers.scylla import ScyllaContainer
-    #
-    # # Create SSL configuration file
-    # ssl_config_path = Path(ssl_certificates['cert_dir']) / 'scylla-ssl.yaml'
-    # with open(ssl_config_path, 'w') as f:
-    #     f.write("""
-    # client_encryption_options:
-    #   enabled: true
-    #   certificate: /etc/scylla/ssl/server-cert.pem
-    #   keyfile: /etc/scylla/ssl/server-key.pem
-    #   truststore: /etc/scylla/ssl/ca-cert.pem
-    #   require_client_auth: false
-    # """)
-    #
-    # container = ScyllaContainer("scylladb/scylla:latest")
-    # container.with_volume_mapping(
-    #     ssl_certificates['cert_dir'],
-    #     "/etc/scylla/ssl",
-    #     mode="ro"
-    # )
-    # container.with_volume_mapping(
-    #     str(ssl_config_path),
-    #     "/etc/scylla/scylla.yaml",
-    #     mode="ro"
-    # )
-    #
-    # with container:
-    #     # Wait for container to be ready
-    #     container.get_connection_url()
-    #     yield container
+    # Prepare SSL configuration
+    ssl_config_path = Path(__file__).parent / 'scylla-ssl.yaml'
+    
+    # Create and configure ScyllaDB container
+    # Note: ScyllaDB doesn't have a dedicated testcontainer yet, so we use generic container
+    container = DockerContainer("scylladb/scylla:latest")
+    
+    # Mount SSL certificates
+    container.with_volume_mapping(
+        ssl_certificates['cert_dir'],
+        "/etc/scylla/ssl",
+        mode="ro"
+    )
+    
+    # Mount SSL configuration
+    container.with_volume_mapping(
+        str(ssl_config_path),
+        "/etc/scylla/scylla.yaml",
+        mode="ro"
+    )
+    
+    # Expose CQL port
+    container.with_exposed_ports(9042)
+    
+    # Start container and wait for it to be ready
+    container.start()
+    
+    try:
+        # Wait for ScyllaDB to start (look for ready message in logs)
+        # This may take 30-60 seconds for ScyllaDB to initialize
+        time.sleep(10)  # Initial wait
+        
+        # Get container connection info
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(9042)
+        
+        # Create a simple connection info object
+        class ConnectionInfo:
+            def __init__(self, host, port, ssl_certs):
+                self.host = host
+                self.port = int(port)
+                self.ssl_certificates = ssl_certs
+        
+        yield ConnectionInfo(host, port, ssl_certificates)
+    finally:
+        container.stop()
+
+
+@pytest.fixture(scope='module')
+def scylla_ssl_container_mtls(ssl_certificates):
+    """
+    ScyllaDB container with mutual TLS (client certificate required).
+    
+    Similar to scylla_ssl_container but requires client certificates.
+    
+    Args:
+        ssl_certificates: Fixture providing SSL certificates
+    
+    Yields:
+        Container instance with connection details
+    """
+    try:
+        from testcontainers.core.container import DockerContainer
+        import time
+        import tempfile
+    except ImportError:
+        pytest.skip("testcontainers package not available")
+    
+    # Create SSL configuration with client auth required
+    mtls_config = """
+client_encryption_options:
+    enabled: true
+    certificate: /etc/scylla/ssl/server-cert.pem
+    keyfile: /etc/scylla/ssl/server-key.pem
+    truststore: /etc/scylla/ssl/ca-cert.pem
+    require_client_auth: true
+"""
+    
+    # Write temporary config file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(mtls_config)
+        mtls_config_path = f.name
+    
+    try:
+        container = DockerContainer("scylladb/scylla:latest")
+        
+        container.with_volume_mapping(
+            ssl_certificates['cert_dir'],
+            "/etc/scylla/ssl",
+            mode="ro"
+        )
+        
+        container.with_volume_mapping(
+            mtls_config_path,
+            "/etc/scylla/scylla.yaml",
+            mode="ro"
+        )
+        
+        container.with_exposed_ports(9042)
+        container.start()
+        
+        try:
+            time.sleep(10)
+            
+            host = container.get_container_host_ip()
+            port = container.get_exposed_port(9042)
+            
+            class ConnectionInfo:
+                def __init__(self, host, port, ssl_certs):
+                    self.host = host
+                    self.port = int(port)
+                    self.ssl_certificates = ssl_certs
+                    self.require_client_auth = True
+            
+            yield ConnectionInfo(host, port, ssl_certificates)
+        finally:
+            container.stop()
+    finally:
+        os.unlink(mtls_config_path)
 
 
 @pytest.fixture(scope='module')
@@ -144,15 +237,20 @@ def cassandra_ssl_container(ssl_certificates):
         Container instance with connection details
     
     Note:
-        Requires testcontainers package and Docker
+        Requires testcontainers package and Docker.
+        Cassandra SSL configuration is more complex than ScyllaDB.
     """
-    pytest.skip("Testcontainers integration pending - see docs/plans/SSL_TLS_INTEGRATION_TEST_PLAN.md")
+    pytest.skip("Cassandra SSL configuration pending - requires keystore/truststore setup")
     
-    # TODO: Implement Cassandra testcontainers integration
-    # from testcontainers.cassandra import CassandraContainer
+    # TODO: Cassandra uses Java keystores (JKS format) instead of PEM files
+    # Need to convert PEM certificates to JKS format using keytool
+    # from testcontainers.core.container import DockerContainer
     # 
-    # Implementation similar to scylla_ssl_container but with
-    # Cassandra-specific SSL configuration
+    # Implementation requires:
+    # 1. Convert PEM certs to JKS keystore/truststore
+    # 2. Configure cassandra.yaml with SSL settings
+    # 3. Mount keystores and config to container
+
 
 
 @pytest.fixture
