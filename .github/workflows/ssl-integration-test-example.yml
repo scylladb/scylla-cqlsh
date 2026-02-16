@@ -48,7 +48,7 @@ jobs:
           # - Waits for readiness
           # - Runs tests
           # - Cleans up containers
-          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+          pytest ./pylib/cqlshlib/test/ssl/ -v -m ssl
         env:
           # Docker is used by testcontainers automatically
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -75,7 +75,7 @@ jobs:
       - name: Run SSL Integration Tests
         run: |
           # Testcontainers can also use CassandraContainer for Cassandra testing
-          pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+          pytest ./pylib/cqlshlib/test/ssl/ -v -m ssl
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
 
@@ -91,5 +91,5 @@ jobs:
 # To activate these tests:
 # 1. Add testcontainers to pylib/requirements.txt
 # 2. Implement testcontainers fixtures in conftest.py
-# 3. Update test_ssl_integration.py to use the fixtures
+# 3. Update test paths to use pylib/cqlshlib/test/ssl/ directory
 # 4. Merge this workflow into .github/workflows/build-push.yml

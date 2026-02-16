@@ -80,13 +80,13 @@ Use python-testcontainers with the built-in ScyllaContainer class for automated,
      ```
 
 4. **Create SSL Integration Tests**
-   - Location: `pylib/cqlshlib/test/test_ssl_integration.py` (extend existing)
-   - Test cases using the fixture:
-     - `test_ssl_basic_connection(scylla_ssl_container)`
-     - `test_ssl_with_validation(scylla_ssl_container)`
-     - `test_ssl_client_auth(scylla_ssl_container)`
-     - `test_ssl_cqlshrc_config(scylla_ssl_container)`
-     - `test_ssl_copy_command(scylla_ssl_container)`
+   - Location: `pylib/cqlshlib/test/ssl/` test module
+   - Test files organized by category:
+     - `test_ssl_connection.py` - Basic SSL connections
+     - `test_ssl_validation.py` - Certificate validation
+     - `test_ssl_client_auth.py` - Mutual TLS
+     - `test_ssl_configuration.py` - Configuration methods
+     - `test_ssl_operations.py` - CQL operations over SSL
 
 #### Advantages Over Manual Docker
 - No need for docker-compose files
@@ -233,7 +233,7 @@ integration_test_scylla_ssl:
     - name: Run SSL Integration Tests
       run: |
         # Testcontainers handles container lifecycle automatically
-        pytest ./pylib/cqlshlib/test/test_ssl_integration.py -v -m ssl
+        pytest ./pylib/cqlshlib/test/ssl/ -v -m ssl
       env:
         # Testcontainers will use Docker automatically
         DOCKER_HOST: unix:///var/run/docker.sock
