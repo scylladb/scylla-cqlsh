@@ -168,7 +168,11 @@ class CqlType:
                     continue
 
                 name = m.group(1)  # a composite type, parse sub types
-                return name, self.parse_sub_types(m.group(2), ksmeta), self._get_formatter(name)
+                sub_types = self.parse_sub_types(m.group(2), ksmeta)
+                if name == 'vector':
+                    # vector<type, dimension> - keep only the element type, discard dimension
+                    sub_types = sub_types[:1]
+                return name, sub_types, self._get_formatter(name)
 
     @staticmethod
     def _get_formatter(name):
