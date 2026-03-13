@@ -1,0 +1,19 @@
+# ScyllaDB SSL/TLS Configuration for Testing
+# This configuration enables client-to-node encryption
+# 
+# WARNING: This is for TESTING ONLY - DO NOT use in production
+# - Uses self-signed certificates
+# - Weak security parameters for simplicity
+
+# Enable client encryption (SSL/TLS)
+client_encryption_options:
+    enabled: true
+    # Path to server certificate (mounted by testcontainers)
+    certificate: /etc/scylla/ssl/server-cert.pem
+    # Path to server private key (mounted by testcontainers)
+    keyfile: /etc/scylla/ssl/server-key.pem
+    # Path to CA certificate for validating client certificates (for mutual TLS)
+    truststore: /etc/scylla/ssl/ca-cert.pem
+    # Set to false for basic SSL (server auth only)
+    # Set to true for mutual TLS (client certificate required)
+    require_client_auth: false
