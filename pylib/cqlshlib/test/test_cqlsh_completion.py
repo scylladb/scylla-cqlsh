@@ -75,11 +75,19 @@ class CqlshCompletionCase(BaseTestCase):
     def tearDown(self):
         self.cqlsh_runner.__exit__(None, None, None)
 
+    def _extra_keyspaces(self):
+        keyspaces = []
+
+        if self.is_scylla:
+            keyspaces += ['audit']
+        return keyspaces
+
     def _system_keyspaces(self):
         tables = []
 
         if self.is_scylla:
             tables += ['system_distributed_everywhere.']
+            tables += ['audit.']
             if  self.is_scylla_enterprise:
                 tables += ['system_replicated_keys.']
         else:
@@ -586,7 +594,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('DROP K', immediate='EYSPACE ')
         quoted_keyspace = '"' + self.cqlsh.keyspace + '"'
         self.trycompletions('DROP KEYSPACE ',
-                            choices=['IF', self.cqlsh.keyspace])
+                            choices=['IF', self.cqlsh.keyspace] + self._extra_keyspaces())
 
         self.trycompletions('DROP KEYSPACE ' + quoted_keyspace,
                             choices=[';'])
@@ -601,7 +609,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         prefix = 'CREATE ' + name + ' '
         quoted_keyspace = '"' + self.cqlsh.keyspace + '"'
         self.trycompletions(prefix + '',
-                            choices=['IF', self.cqlsh.keyspace, '<new_table_name>'])
+                            choices=['IF', self.cqlsh.keyspace, '<new_table_name>'] + self._extra_keyspaces())
         self.trycompletions(prefix + 'IF ',
                             immediate='NOT EXISTS ')
         self.trycompletions(prefix + 'IF NOT EXISTS ',
@@ -869,7 +877,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
     def test_complete_in_alter_keyspace(self):
         self.trycompletions('ALTER KEY', 'SPACE ')
         self.trycompletions('ALTER KEYSPACE ', '', choices=[self.cqlsh.keyspace, 'system_auth',
-                                                            'system_distributed', 'system_traces', 'IF'])
+                                                            'system_distributed', 'system_traces', 'IF'
+                                                            ] + self._extra_keyspaces())
         self.trycompletions('ALTER KEYSPACE I', immediate='F EXISTS ')
         self.trycompletions('ALTER KEYSPACE system_trac', "es WITH replication = {'class': 'NetworkTopologyStrategy', ")
         self.trycompletions("ALTER KEYSPACE system_traces WITH replication = {'class': '", 'NetworkTopologyStrategy')
