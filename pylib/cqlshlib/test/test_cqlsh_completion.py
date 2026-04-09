@@ -599,8 +599,13 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('DROP KEYSPACE ' + quoted_keyspace,
                             choices=[';'])
 
-        self.trycompletions('DROP KEYSPACE I',
-                            immediate='F EXISTS ' + self.cqlsh.keyspace + ' ;')
+        if self.is_scylla:
+            # With the audit keyspace present, there are multiple keyspaces
+            # after IF EXISTS so it can't auto-complete the full thing
+            self.trycompletions('DROP KEYSPACE I', immediate='F EXISTS ')
+        else:
+            self.trycompletions('DROP KEYSPACE I',
+                                immediate='F EXISTS ' + self.cqlsh.keyspace + ' ;')
 
     def create_columnfamily_table_template(self, name):
         """Parameterized test for CREATE COLUMNFAMILY and CREATE TABLE. Since
@@ -613,7 +618,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions(prefix + 'IF ',
                             immediate='NOT EXISTS ')
         self.trycompletions(prefix + 'IF NOT EXISTS ',
-                            choices=['<new_table_name>', self.cqlsh.keyspace])
+                            choices=['<new_table_name>', self.cqlsh.keyspace] + self._extra_keyspaces())
         self.trycompletions(prefix + 'IF NOT EXISTS new_table ',
                             immediate='( ')
 
