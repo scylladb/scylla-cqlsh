@@ -2228,7 +2228,7 @@ class Shell(cmd.Cmd):
 
         Clears the console.
         """
-        subprocess.call('clear', shell=True)
+        subprocess.call(['clear'])
     do_cls = do_clear
 
     def do_debug(self, parsed):
