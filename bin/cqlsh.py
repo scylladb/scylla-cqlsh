@@ -1978,29 +1978,31 @@ class Shell(cmd.Cmd):
         except IOError as e:
             self.printerr('Could not open %r: %s' % (fname, e))
             return
-        subshell = Shell(self.hostname, self.port, color=self.color,
-                         username=self.username,
-                         encoding=self.encoding, stdin=f, tty=False, use_conn=self.conn,
-                         cqlver=self.cql_version, keyspace=self.current_keyspace,
-                         tracing_enabled=self.tracing_enabled,
-                         display_nanotime_format=self.display_nanotime_format,
-                         display_timestamp_format=self.display_timestamp_format,
-                         display_date_format=self.display_date_format,
-                         display_float_precision=self.display_float_precision,
-                         display_double_precision=self.display_double_precision,
-                         display_timezone=self.display_timezone,
-                         max_trace_wait=self.max_trace_wait, ssl=self.ssl,
-                         request_timeout=self.session.default_timeout,
-                         connect_timeout=self.conn.connect_timeout,
-                         is_subshell=True,
-                         auth_provider=self.auth_provider,
-                         )
-        # duplicate coverage related settings in subshell
-        if self.coverage:
-            subshell.coverage = True
-            subshell.coveragerc_path = self.coveragerc_path
-        subshell.cmdloop()
-        f.close()
+        try:
+            subshell = Shell(self.hostname, self.port, color=self.color,
+                             username=self.username,
+                             encoding=self.encoding, stdin=f, tty=False, use_conn=self.conn,
+                             cqlver=self.cql_version, keyspace=self.current_keyspace,
+                             tracing_enabled=self.tracing_enabled,
+                             display_nanotime_format=self.display_nanotime_format,
+                             display_timestamp_format=self.display_timestamp_format,
+                             display_date_format=self.display_date_format,
+                             display_float_precision=self.display_float_precision,
+                             display_double_precision=self.display_double_precision,
+                             display_timezone=self.display_timezone,
+                             max_trace_wait=self.max_trace_wait, ssl=self.ssl,
+                             request_timeout=self.session.default_timeout,
+                             connect_timeout=self.conn.connect_timeout,
+                             is_subshell=True,
+                             auth_provider=self.auth_provider,
+                             )
+            # duplicate coverage related settings in subshell
+            if self.coverage:
+                subshell.coverage = True
+                subshell.coveragerc_path = self.coveragerc_path
+            subshell.cmdloop()
+        finally:
+            f.close()
 
     def do_capture(self, parsed):
         """
