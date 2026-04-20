@@ -6,6 +6,9 @@ build.properties
 build/**                                                                                                                                                                         
 dist/*.tar.gz
 
+# Jetbrains IDE files
+.idea/
+
 # generated code
 bin/cqlsh
 
