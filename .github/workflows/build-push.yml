@@ -129,7 +129,7 @@ jobs:
 
       - name: Build and push release
         if: endsWith(github.event.ref, '-scylla')
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -140,7 +140,7 @@ jobs:
             scylladb/scylla-cqlsh:latest
 
       - name: Build and push master
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: endsWith(github.event.ref, 'master')
         with:
           context: .
