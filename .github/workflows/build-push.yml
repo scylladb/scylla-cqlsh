@@ -26,7 +26,7 @@ jobs:
         os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-14, macos-15-intel]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
@@ -41,7 +41,7 @@ jobs:
     if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build sdist
         run: |
@@ -57,7 +57,7 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Start Scylla
         run: |
@@ -81,7 +81,7 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Start Scylla
         run: |
@@ -105,7 +105,7 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
