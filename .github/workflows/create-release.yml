@@ -75,7 +75,7 @@ jobs:
           echo "${DELIMITER}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ steps.get-prev-tag.outputs.current_tag }}
           body: ${{ steps.changelog.outputs.changelog }}
