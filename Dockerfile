@@ -6,6 +6,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y install --no-ins
 COPY . .
 # Configure pip to retry on network failures (helps with timeout issues)
 ENV PIP_RETRIES=10
+# Upgrade build tools to address CVEs in pip, setuptools, and wheel
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --user .
 
 
@@ -15,7 +17,7 @@ FROM python:3.13-slim-bullseye AS build-image
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y upgrade && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure pip to retry on network failures (helps with timeout issues)
 ENV PIP_RETRIES=10
-RUN pip install --upgrade --no-cache-dir pip
+RUN pip install --upgrade --no-cache-dir pip setuptools wheel requests
 
 COPY --from=compile-image /root/.local /root/.local
 
