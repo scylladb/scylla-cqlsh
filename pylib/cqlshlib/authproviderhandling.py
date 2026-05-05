@@ -20,6 +20,7 @@ Handles loading of AuthProvider for CQLSH authentication.
 import configparser
 import sys
 from importlib import import_module
+from cassandra.auth import AuthProvider
 from cqlshlib.util import is_file_secure
 
 
@@ -168,9 +169,15 @@ def load_auth_provider(config_file=None, cred_file=None, username=None, password
                      **credential_settings,
                      **get_legacy_settings(username, password)}
 
-    # Load class definitions
+    # Import still executes module top-level code; the subclass check below
+    # constrains which classes may be instantiated from cqlshrc.
     module = import_module(module_name)
     auth_provider_klass = getattr(module, class_name)
+
+    if not (isinstance(auth_provider_klass, type) and issubclass(auth_provider_klass, AuthProvider)):
+        raise TypeError(
+            "Configured auth_provider class '%s.%s' is not a subclass of "
+            "cassandra.auth.AuthProvider" % (module_name, class_name))
 
     # instantiate the class
     return auth_provider_klass(**ctor_args)

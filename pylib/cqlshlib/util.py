@@ -141,7 +141,8 @@ def get_file_encoding_bomsize(filename):
                      (codecs.BOM_UTF32_LE, 'utf-32be'),
                      (codecs.BOM_UTF32_BE, 'utf-32be'))
 
-    firstbytes = open(filename, 'rb').read(4)
+    with open(filename, 'rb') as f:
+        firstbytes = f.read(4)
     for bom, encoding in bom_encodings:
         if firstbytes.startswith(bom):
             file_encoding, size = encoding, len(bom)
