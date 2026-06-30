@@ -114,6 +114,17 @@ def trim_if_present(s, prefix):
     return s
 
 
+def control_connection_query_fallback_kwargs():
+    try:
+        from cassandra.cluster import ControlConnectionQueryFallback
+    except ImportError:
+        return {}
+
+    return {
+        'allow_control_connection_query_fallback': ControlConnectionQueryFallback.Fallback
+    }
+
+
 def is_file_secure(filename):
     try:
         st = os.stat(filename)

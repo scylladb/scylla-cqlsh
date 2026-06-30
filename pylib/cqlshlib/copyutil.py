@@ -57,7 +57,7 @@ from cassandra.metadata import protect_name, protect_names, protect_value
 from cassandra.policies import RetryPolicy, WhiteListRoundRobinPolicy, DCAwareRoundRobinPolicy, FallthroughRetryPolicy
 from cassandra.query import BatchStatement, BatchType, SimpleStatement, tuple_factory
 from cassandra.util import Date, Time
-from cqlshlib.util import profile_on, profile_off
+from cqlshlib.util import control_connection_query_fallback_kwargs, profile_on, profile_off
 
 from cqlshlib.cql3handling import CqlRuleSet
 from cqlshlib.displaying import NO_COLOR_MAP
@@ -1717,6 +1717,7 @@ class ExportProcess(ChildProcess):
             compression=None,
             control_connection_timeout=self.connect_timeout,
             connect_timeout=self.connect_timeout,
+            **control_connection_query_fallback_kwargs(),
             idle_heartbeat_interval=0)
         session = ExportSession(new_cluster, self)
         self.hosts_to_sessions[host] = session
@@ -2389,6 +2390,7 @@ class ImportProcess(ChildProcess):
                 compression=None,
                 control_connection_timeout=self.connect_timeout,
                 connect_timeout=self.connect_timeout,
+                **control_connection_query_fallback_kwargs(),
                 idle_heartbeat_interval=0,
                 connection_class=ConnectionWrapper)
 
