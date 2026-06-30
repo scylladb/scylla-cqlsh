@@ -62,7 +62,7 @@ jobs:
       - name: Start Scylla
         run: |
           export DOCKER_ID=$(docker run -d scylladb/scylla:latest --cluster-name test )
-          export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+          export CQL_TEST_HOST=$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${DOCKER_ID})
           while ! nc -z ${CQL_TEST_HOST} 9042; do   
             sleep 0.1 # wait for 1/10 of the second before check again
           done
@@ -75,6 +75,7 @@ jobs:
           pip install -r ./pylib/requirements.txt
            ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
+          ./scripts/run-proxy-access-test.sh
 
   integration_test_cassandra:
     name: Integration Tests (Cassandra)
@@ -86,7 +87,7 @@ jobs:
       - name: Start Scylla
         run: |
           export DOCKER_ID=$(docker run -d -e CASSANDRA_CLUSTER_NAME=test cassandra:5.0 )
-          export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+          export CQL_TEST_HOST=$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${DOCKER_ID})
           while ! nc -z ${CQL_TEST_HOST} 9042; do
                   sleep 0.1 # wait for 1/10 of the second before check again
           done
