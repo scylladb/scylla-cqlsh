@@ -71,10 +71,16 @@ def make_ks_name():
 def create_keyspace(cursor):
     ksname = make_ks_name().lower()
     qksname = quote_name(ksname)
-    cursor.execute('''
-        CREATE KEYSPACE %s WITH replication =
-            {'class': 'SimpleStrategy', 'replication_factor': 1};
-    ''' % qksname)
+    db_type = detect_db_type(cursor)
+    if db_type == "scylla":
+        dc_row = cursor.execute("SELECT data_center FROM system.local").one()
+        data_center = dc_row.data_center if dc_row is not None else "datacenter1"
+        replication_clause = "{'class': 'NetworkTopologyStrategy', '%s': 1}" % data_center
+    else:
+        replication_clause = "{'class': 'SimpleStrategy', 'replication_factor': 1}"
+    cursor.execute(
+        "CREATE KEYSPACE %s WITH replication = %s;" % (qksname, replication_clause)
+    )
     cursor.execute('USE %s;' % qksname)
     TEST_KEYSPACES_CREATED.append(ksname)
     return ksname
@@ -201,4 +207,3 @@ def detect_db_type(cursor):
         pass
     # Default to cassandra if detection fails
     return "cassandra"
-
