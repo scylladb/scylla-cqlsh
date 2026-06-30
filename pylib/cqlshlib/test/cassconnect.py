@@ -75,6 +75,7 @@ def create_keyspace(cursor):
     if db_type == "scylla":
         dc_row = cursor.execute("SELECT data_center FROM system.local").one()
         data_center = dc_row.data_center if dc_row is not None else "datacenter1"
+        data_center = data_center.replace("'", "''")
         replication_clause = "{'class': 'NetworkTopologyStrategy', '%s': 1}" % data_center
     else:
         replication_clause = "{'class': 'SimpleStrategy', 'replication_factor': 1}"
