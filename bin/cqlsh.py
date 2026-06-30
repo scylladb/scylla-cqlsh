@@ -152,7 +152,7 @@ from cqlshlib.formatting import (DEFAULT_DATE_FORMAT, DEFAULT_NANOTIME_FORMAT,
                                  DEFAULT_TIMESTAMP_FORMAT, CqlType, DateTimeFormat,
                                  format_by_type)
 from cqlshlib.tracing import print_trace, print_trace_session
-from cqlshlib.util import get_file_encoding_bomsize
+from cqlshlib.util import control_connection_query_fallback_kwargs, get_file_encoding_bomsize
 from cqlshlib.util import is_file_secure, trim_if_present
 
 try:
@@ -502,6 +502,7 @@ class Shell(cmd.Cmd):
             kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
             # workaround until driver would know not to lose the DNS names for `server_hostname`
             kwargs['ssl_options'] = {'server_hostname': self.hostname} if ssl else None
+            kwargs.update(control_connection_query_fallback_kwargs())
             
             # Disable compression if requested. When not set, the driver will use its default
             # compression behavior (which is to enable compression if lz4 is available)
@@ -2184,6 +2185,7 @@ class Shell(cmd.Cmd):
         kwargs['port'] = self.port
         kwargs['ssl_context'] = self.conn.ssl_context
         kwargs['ssl_options'] = self.conn.ssl_options
+        kwargs.update(control_connection_query_fallback_kwargs())
         
         # Preserve compression setting from original connection
         if self.no_compression:
