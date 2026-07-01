@@ -1,0 +1,10 @@
+# Ignore generated certificates
+certs/
+*.pem
+*.key
+*.crt
+*.csr
+*.srl
+
+# Ignore Docker-generated files
+.env
