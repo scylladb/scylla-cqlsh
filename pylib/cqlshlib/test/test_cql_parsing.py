@@ -771,10 +771,120 @@ class TestCqlParsing(TestCase):
                                   ('"/*MyTable*/"', 'quotedName'),
                                   (';', 'endtoken')])
 
+        parsed = parse_cqlsh_statements('''
+                                        INSERT into a (key,c1,c2) VALUES ('aKey','v1*/','/v2/*/v3');
+                                        ''')
+
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('INSERT', 'reserved_identifier'),
+                                  ('into', 'reserved_identifier'),
+                                  ('a', 'identifier'),
+                                  ('(', 'op'),
+                                  ('key', 'identifier'),
+                                  (',', 'op'),
+                                  ('c1', 'identifier'),
+                                  (',', 'op'),
+                                  ('c2', 'identifier'),
+                                  (')', 'op'),
+                                  ('VALUES', 'identifier'),
+                                  ('(', 'op'),
+                                  ("'aKey'", 'quotedStringLiteral'),
+                                  (',', 'op'),
+                                  ("'v1*/'", 'quotedStringLiteral'),
+                                  (',', 'op'),
+                                  ("'/v2/*/v3'", 'quotedStringLiteral'),
+                                  (')', 'op'),
+                                  (';', 'endtoken')])
+
         parse_cqlsh_statements('''
                                */ SELECT FROM "MyTable";
                                ''')
         self.assertRaises(SyntaxError)
+
+    def test_comments_with_cql_statements(self):
+        """
+        Test that CQL comments work correctly after removing strip_comment_blocks().
+        Verifies that the lexer grammar properly handles comments in various positions.
+        """
+        # Single-line comments with --
+        parsed = parse_cqlsh_statements('SELECT * FROM mytable; -- this is a comment')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('SELECT', 'reserved_identifier'),
+                                  ('*', 'star'),
+                                  ('FROM', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  (';', 'endtoken')])
+
+        # Single-line comments with //
+        parsed = parse_cqlsh_statements('SELECT * FROM mytable; // this is a comment')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('SELECT', 'reserved_identifier'),
+                                  ('*', 'star'),
+                                  ('FROM', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  (';', 'endtoken')])
+
+        # Block comment at the beginning
+        parsed = parse_cqlsh_statements('/* Comment at start */ SELECT * FROM mytable;')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('SELECT', 'reserved_identifier'),
+                                  ('*', 'star'),
+                                  ('FROM', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  (';', 'endtoken')])
+
+        # Block comment in the middle
+        parsed = parse_cqlsh_statements('SELECT * /* inline comment */ FROM mytable;')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('SELECT', 'reserved_identifier'),
+                                  ('*', 'star'),
+                                  ('FROM', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  (';', 'endtoken')])
+
+        # Multiple block comments
+        parsed = parse_cqlsh_statements('/* first */ SELECT /* second */ * FROM mytable; /* third */')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('SELECT', 'reserved_identifier'),
+                                  ('*', 'star'),
+                                  ('FROM', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  (';', 'endtoken')])
+
+        # Multiline block comment
+        parsed = parse_cqlsh_statements('''SELECT * FROM mytable WHERE
+                                        /* This is a multiline
+                                           comment that spans
+                                           multiple lines */
+                                        id = 1;''')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('SELECT', 'reserved_identifier'),
+                                  ('*', 'star'),
+                                  ('FROM', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  ('WHERE', 'reserved_identifier'),
+                                  ('id', 'identifier'),
+                                  ('=', 'op'),
+                                  ('1', 'wholenumber'),
+                                  (';', 'endtoken')])
+
+        # Comment with statement containing /* in string literal (the bug we fixed)
+        parsed = parse_cqlsh_statements('''
+                                        /* This is a real comment */
+                                        INSERT INTO mytable (val) VALUES ('contains /* in string');
+                                        ''')
+        self.assertSequenceEqual(tokens_with_types(parsed),
+                                 [('INSERT', 'reserved_identifier'),
+                                  ('INTO', 'reserved_identifier'),
+                                  ('mytable', 'identifier'),
+                                  ('(', 'op'),
+                                  ('val', 'identifier'),
+                                  (')', 'op'),
+                                  ('VALUES', 'identifier'),
+                                  ('(', 'op'),
+                                  ("'contains /* in string'", 'quotedStringLiteral'),
+                                  (')', 'op'),
+                                  (';', 'endtoken')])
 
 
 def parse_cqlsh_statements(text):
