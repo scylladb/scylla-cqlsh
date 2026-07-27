@@ -143,6 +143,23 @@ class TestExportTask(CopyTaskTest):
     def test_exporting_to_std(self):
         self._test_get_ranges_murmur3_base({'begintoken': MIN_LONG - 1}, {}, fname=None)
 
+    def test_make_params_includes_client_routes_for_workers(self):
+        shell = self.mock_shell()
+        shell.client_routes_config = object()
+        shell.contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+        shell.conn.metadata.partitioner = 'Murmur3Partitioner'
+        shell.get_ring.return_value = {
+            Murmur3Token(-9223372036854775808): self.hosts[0:3],
+        }
+
+        export_task = ExportTask(shell, self.ks, self.table, self.columns,
+                                 self.fname, {}, self.protocol_version, self.config_file)
+        params = export_task.make_params()
+
+        self.assertIs(params['client_routes_config'], shell.client_routes_config)
+        self.assertEqual(params['contact_points'], shell.contact_points)
+        export_task.close()
+
 
 class TestImportTask(CopyTaskTest):
     def test_validate_columns(self):
@@ -390,4 +407,3 @@ class TestImportTask(CopyTaskTest):
                 self.assertEqual(rows[2], ['row3val1', 'row3val2'])
 
             import_task.close()
-
