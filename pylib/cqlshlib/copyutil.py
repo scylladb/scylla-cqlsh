@@ -500,6 +500,7 @@ class CopyTask(object):
         this dictionary must be picklable.
         """
         shell = self.shell
+        client_routes_config = getattr(shell, 'client_routes_config', None)
 
         return dict(ks=self.ks,
                     table=self.table,
@@ -511,6 +512,8 @@ class CopyTask(object):
                     port=shell.port,
                     ssl=shell.ssl,
                     auth_provider=shell.auth_provider,
+                    client_routes_config=client_routes_config,
+                    contact_points=getattr(shell, 'contact_points', None) if client_routes_config is not None else None,
                     cql_version=shell.conn.cql_version,
                     config_file=self.config_file,
                     protocol_version=self.protocol_version,
@@ -1438,6 +1441,8 @@ class ChildProcess(mp.Process):
         self.connect_timeout = params['connect_timeout']
         self.cql_version = params['cql_version']
         self.auth_provider = params['auth_provider']
+        self.client_routes_config = params['client_routes_config']
+        self.contact_points = params['contact_points']
         self.ssl = params['ssl']
         self.protocol_version = params['protocol_version']
         self.config_file = params['config_file']
@@ -1705,8 +1710,14 @@ class ExportProcess(ChildProcess):
             session.add_request()
             return session
 
+        kwargs = {}
+        if self.client_routes_config is not None:
+            kwargs['contact_points'] = self.contact_points
+            kwargs['client_routes_config'] = self.client_routes_config
+        else:
+            kwargs['contact_points'] = (host,)
+
         new_cluster = Cluster(
-            contact_points=(host,),
             port=self.port,
             cql_version=self.cql_version,
             protocol_version=self.protocol_version,
@@ -1718,6 +1729,7 @@ class ExportProcess(ChildProcess):
             control_connection_timeout=self.connect_timeout,
             connect_timeout=self.connect_timeout,
             **control_connection_query_fallback_kwargs(),
+            **kwargs,
             idle_heartbeat_interval=0)
         session = ExportSession(new_cluster, self)
         self.hosts_to_sessions[host] = session
@@ -2378,8 +2390,14 @@ class ImportProcess(ChildProcess):
     @property
     def session(self):
         if not self._session:
+            kwargs = {}
+            if self.client_routes_config is not None:
+                kwargs['contact_points'] = self.contact_points
+                kwargs['client_routes_config'] = self.client_routes_config
+            else:
+                kwargs['contact_points'] = (self.hostname,)
+
             cluster = Cluster(
-                contact_points=(self.hostname,),
                 port=self.port,
                 cql_version=self.cql_version,
                 protocol_version=self.protocol_version,
@@ -2391,6 +2409,7 @@ class ImportProcess(ChildProcess):
                 control_connection_timeout=self.connect_timeout,
                 connect_timeout=self.connect_timeout,
                 **control_connection_query_fallback_kwargs(),
+                **kwargs,
                 idle_heartbeat_interval=0,
                 connection_class=ConnectionWrapper)
 

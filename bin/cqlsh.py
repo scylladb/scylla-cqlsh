@@ -134,9 +134,14 @@ from cassandra.connection import UnixSocketEndPoint
 from cassandra.cqltypes import cql_typename
 from cassandra.marshal import int64_unpack
 from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata, TableMetadata, protect_name, protect_names)
-from cassandra.policies import WhiteListRoundRobinPolicy
+from cassandra.policies import RoundRobinPolicy, WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
 from cassandra.util import datetime_from_timestamp
+try:
+    from cassandra.client_routes import ClientRouteProxy, ClientRoutesConfig
+except ImportError:
+    ClientRouteProxy = None
+    ClientRoutesConfig = None
 
 # cqlsh should run correctly when run out of a Cassandra source tree,
 # out of an unpacked Cassandra tarball, and after a proper package install.
@@ -201,6 +206,15 @@ parser.add_option("--browser", dest='browser', help="""The browser to use to dis
                                                     - browser path followed by %s, example: /usr/bin/google-chrome-stable %s""")
 parser.add_option('--ssl', action='store_true', help='Use SSL', default=False)
 parser.add_option('--no-compression', action='store_true', help='Disable compression', default=False)
+parser.add_option('--client-route', action='append', dest='client_routes',
+                  metavar='CONNECTION_ID[=ADDRESS]',
+                  help='Enable client routes. Repeat for each CONNECTION_ID[=ADDRESS].')
+parser.add_option('--client-routes-advanced-shard-awareness', action='store_true',
+                  dest='client_routes_advanced_shard_awareness',
+                  help='Use shard-aware ports with client routes.')
+parser.add_option('--no-client-routes-advanced-shard-awareness', action='store_false',
+                  dest='client_routes_advanced_shard_awareness',
+                  help='Do not use shard-aware ports with client routes.')
 parser.add_option("-u", "--username", help="Authenticate as user.")
 parser.add_option("-p", "--password", help="Authenticate using password.")
 parser.add_option('-k', '--keyspace', help='Authenticate to the given keyspace.')
@@ -459,6 +473,8 @@ class Shell(cmd.Cmd):
                  is_subshell=False,
                  auth_provider=None,
                  no_compression=False,
+                 client_routes_config=None,
+                 contact_points=None,
                  ):
         cmd.Cmd.__init__(self, completekey=completekey)
         self.hostname = hostname
@@ -466,6 +482,8 @@ class Shell(cmd.Cmd):
         self.auth_provider = auth_provider
         self.username = username
         self.no_compression = no_compression
+        self.client_routes_config = client_routes_config
+        self.contact_points = tuple(contact_points) if contact_points else (self.hostname,)
 
         if isinstance(auth_provider, PlainTextAuthProvider):
             self.username = auth_provider.username
@@ -493,11 +511,18 @@ class Shell(cmd.Cmd):
             }
 
             if self.is_unix_socket(self.hostname):
-                kwargs['contact_points'] = (UnixSocketEndPoint(self.hostname),)
-                self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([UnixSocketEndPoint(self.hostname)])
+                self.contact_points = (UnixSocketEndPoint(self.hostname),)
+                kwargs['contact_points'] = self.contact_points
+                if client_routes_config is None:
+                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy(self.contact_points)
             else:
-                kwargs['contact_points'] = (self.hostname,)
-                self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy([self.hostname])
+                self.contact_points = tuple(contact_points) if contact_points else (self.hostname,)
+                kwargs['contact_points'] = self.contact_points
+                if client_routes_config is None:
+                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy(self.contact_points)
+            if client_routes_config is not None:
+                kwargs['client_routes_config'] = client_routes_config
+                self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = RoundRobinPolicy()
             kwargs['port'] = self.port
             kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
             # workaround until driver would know not to lose the DNS names for `server_hostname`
@@ -2181,10 +2206,12 @@ class Shell(cmd.Cmd):
         auth_provider = PlainTextAuthProvider(username=username, password=password)
 
         kwargs = {}
-        kwargs['contact_points'] = (self.hostname,)
+        kwargs['contact_points'] = self.contact_points
         kwargs['port'] = self.port
         kwargs['ssl_context'] = self.conn.ssl_context
         kwargs['ssl_options'] = self.conn.ssl_options
+        if self.client_routes_config is not None:
+            kwargs['client_routes_config'] = self.client_routes_config
         kwargs.update(control_connection_query_fallback_kwargs())
         
         # Preserve compression setting from original connection
@@ -2441,6 +2468,59 @@ def raw_option_with_default(configs, section, option, default=None):
         return default
 
 
+def parse_client_route_spec(spec):
+    spec = spec.strip()
+    if not spec:
+        raise ValueError("client route must not be empty")
+
+    connection_id, separator, address_override = spec.partition('=')
+    connection_id = connection_id.strip()
+    if not connection_id:
+        raise ValueError("client route %r has empty connection id" % (spec,))
+
+    if not separator:
+        return connection_id, None
+
+    address_override = address_override.strip()
+    if not address_override:
+        raise ValueError("client route %r has empty address override" % (spec,))
+
+    return connection_id, address_override
+
+
+def parse_client_routes(value):
+    if not value:
+        return []
+
+    if isinstance(value, (list, tuple)):
+        raw_specs = []
+        for item in value:
+            raw_specs.extend(re.split(r'[\n,]+', item))
+    else:
+        raw_specs = re.split(r'[\n,]+', value)
+
+    routes = []
+    for spec in raw_specs:
+        if not spec or not spec.strip():
+            continue
+        routes.append(parse_client_route_spec(spec))
+    return routes
+
+
+def build_client_routes_config(routes, advanced_shard_awareness):
+    if not routes:
+        return None
+
+    if ClientRouteProxy is None or ClientRoutesConfig is None:
+        parser.error("Installed Scylla Python driver does not support client routes.")
+
+    proxies = [ClientRouteProxy(connection_id, address_override)
+               for connection_id, address_override in routes]
+    return ClientRoutesConfig(
+        proxies=proxies,
+        advanced_shard_awareness=advanced_shard_awareness)
+
+
 def should_use_color():
     if not sys.stdout.isatty():
         return False
@@ -2500,6 +2580,11 @@ def read_options(cmdlineargs, environment):
     optvalues.max_trace_wait = option_with_default(configs.getfloat, 'tracing', 'max_trace_wait',
                                                    DEFAULT_MAX_TRACE_WAIT)
     optvalues.timezone = option_with_default(configs.get, 'ui', 'timezone', None)
+    try:
+        config_client_routes = parse_client_routes(
+            raw_option_with_default(rawconfigs, 'client_routes', 'proxies', ''))
+    except ValueError as e:
+        parser.error(str(e))
 
     optvalues.debug = False
     optvalues.driver_debug = False
@@ -2510,6 +2595,9 @@ def read_options(cmdlineargs, environment):
     optvalues.file = None
     optvalues.ssl = option_with_default(configs.getboolean, 'connection', 'ssl', DEFAULT_SSL)
     optvalues.no_compression = option_with_default(configs.getboolean, 'connection', 'no_compression', False)
+    optvalues.client_routes = None
+    optvalues.client_routes_advanced_shard_awareness = option_with_default(
+        configs.getboolean, 'client_routes', 'advanced_shard_awareness', False)
     optvalues.encoding = option_with_default(configs.get, 'ui', 'encoding', UTF8)
 
     optvalues.tty = option_with_default(configs.getboolean, 'ui', 'tty', sys.stdin.isatty())
@@ -2521,6 +2609,18 @@ def read_options(cmdlineargs, environment):
     optvalues.insecure_password_without_warning = False
 
     (options, arguments) = parser.parse_args(cmdlineargs, values=optvalues)
+
+    try:
+        if options.client_routes is None:
+            options.client_routes = config_client_routes
+        else:
+            options.client_routes = parse_client_routes(options.client_routes)
+    except ValueError as e:
+        parser.error(str(e))
+
+    options.client_routes_config = build_client_routes_config(
+        options.client_routes,
+        options.client_routes_advanced_shard_awareness)
 
     # Credentials from cqlshrc will be expanded,
     # credentials from the command line are also expanded if there is a space...
@@ -2563,8 +2663,10 @@ def read_options(cmdlineargs, environment):
     options.password = maybe_ensure_text(options.password)
     options.keyspace = maybe_ensure_text(options.keyspace)
 
-    hostname = option_with_default(configs.get, 'connection', 'hostname', DEFAULT_HOST)
+    config_hostname = option_with_default(configs.get, 'connection', 'hostname')
+    hostname = config_hostname or DEFAULT_HOST
     port = option_with_default(configs.get, 'connection', 'port', DEFAULT_PORT)
+    host_was_explicit = config_hostname is not None
 
     try:
         options.connect_timeout = int(options.connect_timeout)
@@ -2578,13 +2680,23 @@ def read_options(cmdlineargs, environment):
         parser.error('"%s" is not a valid request timeout.' % (options.request_timeout,))
         options.request_timeout = DEFAULT_REQUEST_TIMEOUT_SECONDS
 
-    hostname = environment.get('CQLSH_HOST', hostname)
+    if 'CQLSH_HOST' in environment:
+        hostname = environment['CQLSH_HOST']
+        host_was_explicit = True
     port = environment.get('CQLSH_PORT', port)
 
     if len(arguments) > 0:
         hostname = arguments[0]
+        host_was_explicit = True
     if len(arguments) > 1:
         port = arguments[1]
+
+    options.contact_points = None
+    if options.client_routes_config is not None and not host_was_explicit:
+        client_route_contact_points = [address for _, address in options.client_routes if address]
+        if client_route_contact_points:
+            hostname = client_route_contact_points[0]
+            options.contact_points = tuple(client_route_contact_points)
 
     if options.file or options.execute:
         options.tty = False
@@ -2674,6 +2786,7 @@ def main(options, hostname, port):
         sys.stderr.write("Using '%s' encoding\n" % (options.encoding,))
         sys.stderr.write("Using ssl: %s\n" % (options.ssl,))
         sys.stderr.write("Using compression: %s\n" % (not options.no_compression,))
+        sys.stderr.write("Using client routes: %s\n" % (options.client_routes_config is not None,))
 
     # create timezone based on settings, environment or auto-detection
     timezone = None
@@ -2737,6 +2850,8 @@ def main(options, hostname, port):
                           username=options.username,
                           password=options.password),
                       no_compression=options.no_compression,
+                      client_routes_config=options.client_routes_config,
+                      contact_points=options.contact_points,
                       )
     except KeyboardInterrupt:
         sys.exit('Connection aborted.')
