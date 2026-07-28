@@ -157,3 +157,93 @@ def test_shell_passes_client_routes_config_to_cluster(cqlsh_module):
     assert call_kwargs['client_routes_config'] is client_routes_config
     profile = call_kwargs['execution_profiles'][cqlsh_module.EXEC_PROFILE_DEFAULT]
     assert isinstance(profile.load_balancing_policy, cqlsh_module.RoundRobinPolicy)
+
+
+def test_login_reconnect_preserves_client_routes(cqlsh_module):
+    client_routes_config = object()
+    contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+    profile = cqlsh_module.ExecutionProfile(load_balancing_policy=cqlsh_module.RoundRobinPolicy())
+
+    shell = MagicMock()
+    shell.contact_points = contact_points
+    shell.port = 9042
+    shell.conn.cql_version = '3.4.5'
+    shell.conn.protocol_version = 4
+    shell.conn.connect_timeout = 5
+    shell.conn.ssl_context = 'ssl-context'
+    shell.conn.ssl_options = {'server_hostname': 'proxy-a.example.com'}
+    shell.client_routes_config = client_routes_config
+    shell.no_compression = False
+    shell.profiles = {cqlsh_module.EXEC_PROFILE_DEFAULT: profile}
+    shell.current_keyspace = 'testks'
+    shell.session.max_trace_wait = 10
+
+    parsed = MagicMock()
+    parsed.get_binding.side_effect = lambda name: {
+        'username': 'alice',
+        'password': "'secret'",
+    }[name]
+
+    with patch.object(cqlsh_module, 'Cluster') as mock_cluster:
+        session = MagicMock()
+        mock_cluster.return_value.connect.return_value = session
+
+        cqlsh_module.Shell.do_login(shell, parsed)
+
+    call_kwargs = mock_cluster.call_args[1]
+    assert call_kwargs['contact_points'] == contact_points
+    assert call_kwargs['client_routes_config'] is client_routes_config
+    assert call_kwargs['execution_profiles'] is shell.profiles
+    profile = call_kwargs['execution_profiles'][cqlsh_module.EXEC_PROFILE_DEFAULT]
+    assert isinstance(profile.load_balancing_policy, cqlsh_module.RoundRobinPolicy)
+    mock_cluster.return_value.connect.assert_called_once_with('testks')
+    assert shell.conn is mock_cluster.return_value
+    assert shell.session is session
+
+
+def test_source_subshell_preserves_client_routes(cqlsh_module, tmp_path):
+    client_routes_config = object()
+    contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+    source_file = tmp_path / 'source.cql'
+    source_file.write_text('COPY test.tbl TO STDOUT;\n')
+
+    parent_shell = MagicMock()
+    parent_shell.hostname = 'proxy-a.example.com'
+    parent_shell.port = 9042
+    parent_shell.color = False
+    parent_shell.username = None
+    parent_shell.encoding = 'utf-8'
+    parent_shell.conn.connect_timeout = 5
+    parent_shell.session.default_timeout = 10
+    parent_shell.cql_version = '3.4.5'
+    parent_shell.current_keyspace = 'testks'
+    parent_shell.tracing_enabled = False
+    parent_shell.display_nanotime_format = cqlsh_module.DEFAULT_NANOTIME_FORMAT
+    parent_shell.display_timestamp_format = cqlsh_module.DEFAULT_TIMESTAMP_FORMAT
+    parent_shell.display_date_format = cqlsh_module.DEFAULT_DATE_FORMAT
+    parent_shell.display_float_precision = cqlsh_module.DEFAULT_FLOAT_PRECISION
+    parent_shell.display_double_precision = cqlsh_module.DEFAULT_DOUBLE_PRECISION
+    parent_shell.display_timezone = None
+    parent_shell.max_trace_wait = cqlsh_module.DEFAULT_MAX_TRACE_WAIT
+    parent_shell.ssl = False
+    parent_shell.auth_provider = None
+    parent_shell.client_routes_config = client_routes_config
+    parent_shell.contact_points = contact_points
+    parent_shell.coverage = False
+    parent_shell.cql_unprotect_value.return_value = str(source_file)
+
+    parsed = MagicMock()
+    parsed.get_binding.return_value = str(source_file)
+
+    original_shell = cqlsh_module.Shell
+    with patch.object(cqlsh_module, 'Shell') as mock_shell:
+        subshell = MagicMock()
+        mock_shell.return_value = subshell
+
+        original_shell.do_source(parent_shell, parsed)
+
+    call_kwargs = mock_shell.call_args[1]
+    assert call_kwargs['use_conn'] is parent_shell.conn
+    assert call_kwargs['client_routes_config'] is client_routes_config
+    assert call_kwargs['contact_points'] == contact_points
+    subshell.cmdloop.assert_called_once_with()
