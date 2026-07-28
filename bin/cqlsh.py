@@ -2020,6 +2020,8 @@ class Shell(cmd.Cmd):
                          connect_timeout=self.conn.connect_timeout,
                          is_subshell=True,
                          auth_provider=self.auth_provider,
+                         client_routes_config=self.client_routes_config,
+                         contact_points=self.contact_points,
                          )
         # duplicate coverage related settings in subshell
         if self.coverage:
