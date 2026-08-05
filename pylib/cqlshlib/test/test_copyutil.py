@@ -21,11 +21,13 @@ import csv
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from cassandra.metadata import MIN_LONG, Murmur3Token
+from cassandra.policies import WhiteListRoundRobinPolicy
 
-from cqlshlib.copyutil import ExportTask, ImportTask, ImportTaskError
+from cqlshlib.copyutil import (ExportProcess, ExportTask, FastTokenAwarePolicy, ImportProcess, ImportTask,
+                               ImportTaskError)
 
 
 Default = object()
@@ -48,6 +50,7 @@ class CopyTaskTest(unittest.TestCase):
             host = Mock()
             host.address = ip
             host.datacenter = 'dc1'
+            host.is_up = True
             self.hosts.append(host)
 
     def mock_shell(self):
@@ -59,6 +62,7 @@ class CopyTaskTest(unittest.TestCase):
         shell.conn.get_control_connection_host.return_value = self.hosts[0]
         shell.conn.connect_timeout = 5
         shell.conn.cql_version = '3.4.5'
+        shell.conn.metadata.all_hosts.return_value = self.hosts
         shell.get_column_names.return_value = self.columns
         shell.debug = False
         shell.coverage = False
@@ -66,6 +70,8 @@ class CopyTaskTest(unittest.TestCase):
         shell.port = 9042
         shell.ssl = None
         shell.auth_provider = None
+        shell.client_routes_config = None
+        shell.contact_points = (self.hosts[0].address,)
         shell.consistency_level = 'ONE'
         shell.display_timestamp_format = 'DEFAULT_TIMESTAMP_FORMAT'
         shell.display_date_format = 'DEFAULT_DATE_FORMAT'
@@ -160,8 +166,92 @@ class TestExportTask(CopyTaskTest):
         self.assertEqual(params['contact_points'], shell.contact_points)
         export_task.close()
 
+    def test_export_process_uses_client_routes_when_connecting_worker(self):
+        shell = self.mock_shell()
+        shell.client_routes_config = object()
+        shell.contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+        shell.ssl = True
+        ssl_context = object()
+        export_task = ExportTask(shell, self.ks, self.table, self.columns,
+                                 self.fname, {}, self.protocol_version, self.config_file)
+        export_process = ExportProcess(export_task.update_params(export_task.make_params(), 0))
+
+        with patch('cqlshlib.copyutil.ssl_settings', return_value=ssl_context) as mock_ssl_settings, \
+                patch('cqlshlib.copyutil.Cluster') as mock_cluster:
+            mock_cluster.return_value.connect.return_value = Mock()
+
+            export_process.connect('10.0.0.2')
+
+        call_kwargs = mock_cluster.call_args[1]
+        self.assertEqual(call_kwargs['contact_points'], shell.contact_points)
+        self.assertIs(call_kwargs['client_routes_config'], shell.client_routes_config)
+        self.assertIsInstance(call_kwargs['load_balancing_policy'], WhiteListRoundRobinPolicy)
+        self.assertIs(call_kwargs['ssl_context'], ssl_context)
+        mock_ssl_settings.assert_called_once_with('proxy-a.example.com', self.config_file)
+        export_task.close()
+
+    def test_get_ranges_uses_metadata_host_when_client_routes_control_host_missing(self):
+        shell = self.mock_shell()
+        shell.conn.get_control_connection_host.return_value = None
+        shell.client_routes_config = object()
+        shell.contact_points = ('proxy-a.example.com',)
+        shell.conn.metadata.partitioner = 'Murmur3Partitioner'
+        shell.conn.metadata.token_map = None
+        shell.conn.metadata.all_hosts.return_value = [self.hosts[1]]
+
+        export_task = ExportTask(shell, self.ks, self.table, self.columns,
+                                 self.fname, {}, self.protocol_version, self.config_file)
+
+        self.assertEqual(export_task.get_ranges(), {
+            (None, None): {'hosts': ('10.0.0.2',), 'attempts': 0, 'rows': 0, 'workerno': -1}
+        })
+        export_task.close()
+
 
 class TestImportTask(CopyTaskTest):
+    def test_make_params_uses_metadata_host_when_client_routes_control_host_missing(self):
+        shell = self.mock_shell()
+        shell.conn.get_control_connection_host.return_value = None
+        shell.client_routes_config = object()
+        shell.contact_points = ('proxy-a.example.com',)
+        shell.conn.metadata.all_hosts.return_value = [self.hosts[2]]
+
+        import_task = ImportTask(shell, self.ks, self.table, self.columns,
+                                 self.fname, {}, self.protocol_version, self.config_file)
+        params = import_task.make_params()
+
+        self.assertEqual(params['hostname'], '10.0.0.3')
+        self.assertEqual(params['local_dc'], 'dc1')
+        self.assertIs(params['client_routes_config'], shell.client_routes_config)
+        self.assertEqual(params['contact_points'], shell.contact_points)
+        import_task.close()
+
+    def test_import_process_uses_client_routes_when_connecting_worker(self):
+        shell = self.mock_shell()
+        shell.client_routes_config = object()
+        shell.contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+        shell.ssl = True
+        ssl_context = object()
+        import_task = ImportTask(shell, self.ks, self.table, self.columns,
+                                 self.fname, {}, self.protocol_version, self.config_file)
+        import_process = ImportProcess(import_task.update_params(import_task.make_params(), 0))
+
+        with patch('cqlshlib.copyutil.ssl_settings', return_value=ssl_context) as mock_ssl_settings, \
+                patch('cqlshlib.copyutil.Cluster') as mock_cluster:
+            session = Mock()
+            mock_cluster.return_value.connect.return_value = session
+
+            self.assertIs(import_process.session, session)
+
+        call_kwargs = mock_cluster.call_args[1]
+        self.assertEqual(call_kwargs['contact_points'], shell.contact_points)
+        self.assertIs(call_kwargs['client_routes_config'], shell.client_routes_config)
+        self.assertIsInstance(call_kwargs['load_balancing_policy'], FastTokenAwarePolicy)
+        self.assertIs(call_kwargs['ssl_context'], ssl_context)
+        mock_ssl_settings.assert_called_once_with('proxy-a.example.com', self.config_file)
+        mock_cluster.return_value.connect.assert_called_once_with(self.ks)
+        import_task.close()
+
     def test_validate_columns(self):
         shell = self.mock_shell()
         shell.conn.metadata.partitioner = 'Murmur3Partitioner'

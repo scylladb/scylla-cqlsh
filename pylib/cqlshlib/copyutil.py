@@ -258,7 +258,7 @@ class CopyTask(object):
         self.ks = ks
         self.table = table
         self.table_meta = self.shell.get_table_meta(self.ks, self.table)
-        self.host = shell.conn.get_control_connection_host()
+        self.host = self.get_host(shell)
         self.fname = safe_normpath(fname)
         self.protocol_version = protocol_version
         self.config_file = config_file
@@ -463,6 +463,24 @@ class CopyTask(object):
         to specify all columns except a few.
         """
         return shell.get_column_names(ks, table) if not columns else columns
+
+    @staticmethod
+    def get_host(shell):
+        """
+        Return the host COPY uses to determine local datacenter and fallback address.
+        """
+        host = shell.conn.get_control_connection_host()
+        if host is not None or getattr(shell, 'client_routes_config', None) is None:
+            return host
+
+        hosts = shell.conn.metadata.all_hosts()
+        if not hosts:
+            return None
+
+        for metadata_host in hosts:
+            if metadata_host.is_up is not False:
+                return metadata_host
+        return hosts[0]
 
     def close(self):
         self.stop_processes()
@@ -1479,6 +1497,13 @@ class ChildProcess(mp.Process):
         self.inmsg.close()
         self.outmsg.close()
 
+    def get_ssl_settings_host(self, default_host):
+        if self.client_routes_config is None or not self.contact_points:
+            return default_host
+
+        contact_point = self.contact_points[0]
+        return str(getattr(contact_point, 'address', contact_point))
+
     def start_coverage(self):
         import coverage
         self.coverage_collection = coverage.Coverage(config_file=self.coveragerc_path)
@@ -1722,7 +1747,7 @@ class ExportProcess(ChildProcess):
             cql_version=self.cql_version,
             protocol_version=self.protocol_version,
             auth_provider=self.auth_provider,
-            ssl_context=ssl_settings(host, self.config_file) if self.ssl else None,
+            ssl_context=ssl_settings(self.get_ssl_settings_host(host), self.config_file) if self.ssl else None,
             load_balancing_policy=WhiteListRoundRobinPolicy([host]),
             default_retry_policy=ExpBackoffRetryPolicy(self),
             compression=None,
@@ -2403,7 +2428,8 @@ class ImportProcess(ChildProcess):
                 protocol_version=self.protocol_version,
                 auth_provider=self.auth_provider,
                 load_balancing_policy=FastTokenAwarePolicy(self),
-                ssl_context=ssl_settings(self.hostname, self.config_file) if self.ssl else None,
+                ssl_context=ssl_settings(self.get_ssl_settings_host(self.hostname),
+                                         self.config_file) if self.ssl else None,
                 default_retry_policy=FallthroughRetryPolicy(),  # we throw on timeouts and retry in the error callback
                 compression=None,
                 control_connection_timeout=self.connect_timeout,
