@@ -27,6 +27,7 @@ import random
 import re
 import signal
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -479,7 +480,9 @@ class CopyTask(object):
     @staticmethod
     def trace_process(pid):
         if pid and STRACE_ON:
-            os.system("strace -vvvv -c -o strace.{pid}.out -e trace=all -p {pid}&".format(pid=pid))
+            subprocess.Popen(
+                ['strace', '-vvvv', '-c', '-o', 'strace.%d.out' % pid,
+                 '-e', 'trace=all', '-p', str(pid)])
 
     def start_processes(self):
         for i, process in enumerate(self.processes):
