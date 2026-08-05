@@ -3,3 +3,6 @@ scylla-driver
 https://github.com/scylladb/scylla-ccm/archive/master.zip
 coverage
 pytest
+# SSL/TLS integration test dependencies
+testcontainers>=3.0
+cryptography>=41.0
