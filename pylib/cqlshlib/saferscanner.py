@@ -19,15 +19,22 @@
 # regex in-pattern flags. Any of those can break correct operation of Scanner.
 
 import re
-from sre_constants import BRANCH, SUBPATTERN, GROUPREF, GROUPREF_IGNORE, GROUPREF_EXISTS
 from sys import version_info
 
 try:
     sre_parse = re._parser
     sre_compile = re._compiler
+    sre_constants = re._constants
 except AttributeError:
     sre_parse = re.sre_parse
     sre_compile = re.sre_compile
+    import sre_constants
+
+BRANCH = sre_constants.BRANCH
+SUBPATTERN = sre_constants.SUBPATTERN
+GROUPREF = sre_constants.GROUPREF
+GROUPREF_IGNORE = sre_constants.GROUPREF_IGNORE
+GROUPREF_EXISTS = sre_constants.GROUPREF_EXISTS
 
 
 class SaferScannerBase(re.Scanner):
