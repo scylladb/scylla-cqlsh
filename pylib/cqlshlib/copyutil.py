@@ -467,19 +467,38 @@ class CopyTask(object):
     def get_host(shell):
         """
         Return the host COPY uses to determine local datacenter and fallback address.
+
+        With client routes the control connection is opened against a proxy endpoint that
+        never matches a host in the driver metadata, so get_control_connection_host() keeps
+        returning None for the whole session and we have to pick a host ourselves. That pick
+        decides local_dc, which decides which replicas COPY talks to, so prefer a host we
+        know we are connected to, keep the choice deterministic instead of depending on
+        metadata iteration order, and say so when the cluster spans several datacenters.
         """
         host = shell.conn.get_control_connection_host()
         if host is not None or getattr(shell, 'client_routes_config', None) is None:
             return host
 
-        hosts = shell.conn.metadata.all_hosts()
+        hosts = sorted(shell.conn.metadata.all_hosts(),
+                       key=lambda h: (str(h.datacenter), str(h.address)))
         if not hosts:
+            shell.printerr('Unable to pick a host for COPY: the cluster metadata has no hosts')
             return None
 
-        for metadata_host in hosts:
-            if metadata_host.is_up is not False:
-                return metadata_host
-        return hosts[0]
+        candidates = [h for h in hosts if h.is_up is not False] or hosts
+        # a contact point that is also a known host is the closest we can get to the host
+        # the control connection is actually talking to
+        contact_points = {str(getattr(cp, 'address', cp))
+                          for cp in (getattr(shell, 'contact_points', None) or ())}
+        chosen = next((h for h in candidates if str(h.address) in contact_points), candidates[0])
+
+        datacenters = sorted({str(h.datacenter) for h in candidates})
+        if len(datacenters) > 1:
+            shell.printerr('Warning: the control connection host is unknown with client routes, '
+                           'so COPY picked %s in datacenter %s out of %s. Data owned only by '
+                           'replicas in the other datacenters may be unreachable.'
+                           % (chosen.address, chosen.datacenter, ', '.join(datacenters)))
+        return chosen
 
     def close(self):
         self.stop_processes()

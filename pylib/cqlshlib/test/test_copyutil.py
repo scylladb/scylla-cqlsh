@@ -26,7 +26,7 @@ from unittest.mock import Mock, patch
 from cassandra.metadata import MIN_LONG, Murmur3Token
 from cassandra.policies import WhiteListRoundRobinPolicy
 
-from cqlshlib.copyutil import (ExportProcess, ExportTask, FastTokenAwarePolicy, ImportProcess, ImportTask,
+from cqlshlib.copyutil import (CopyTask, ExportProcess, ExportTask, FastTokenAwarePolicy, ImportProcess, ImportTask,
                                ImportTaskError)
 
 
@@ -86,6 +86,87 @@ class CopyTaskTest(unittest.TestCase):
         shell.get_table_meta.return_value = table_meta
 
         return shell
+
+
+class TestGetHost(CopyTaskTest):
+    """
+    CopyTask.get_host picks the host whose datacenter becomes local_dc, which decides which
+    replicas COPY talks to, so the pick must not depend on driver metadata iteration order.
+    """
+
+    def mock_shell_without_control_host(self):
+        shell = self.mock_shell()
+        shell.conn.get_control_connection_host.return_value = None
+        shell.client_routes_config = object()
+        shell.contact_points = ('proxy-a.example.com',)
+        return shell
+
+    def test_returns_control_connection_host_when_available(self):
+        shell = self.mock_shell()
+        self.assertIs(CopyTask.get_host(shell), self.hosts[0])
+        shell.conn.metadata.all_hosts.assert_not_called()
+
+    def test_returns_none_without_client_routes(self):
+        shell = self.mock_shell()
+        shell.conn.get_control_connection_host.return_value = None
+
+        self.assertIsNone(CopyTask.get_host(shell))
+        shell.conn.metadata.all_hosts.assert_not_called()
+
+    def test_is_deterministic_regardless_of_metadata_order(self):
+        shell = self.mock_shell_without_control_host()
+
+        shell.conn.metadata.all_hosts.return_value = list(self.hosts)
+        first = CopyTask.get_host(shell)
+        shell.conn.metadata.all_hosts.return_value = list(reversed(self.hosts))
+        second = CopyTask.get_host(shell)
+
+        self.assertIs(first, second)
+        self.assertEqual(first.address, '10.0.0.1')
+
+    def test_prefers_a_host_that_is_also_a_contact_point(self):
+        shell = self.mock_shell_without_control_host()
+        shell.contact_points = ('proxy-a.example.com', self.hosts[2].address)
+
+        self.assertIs(CopyTask.get_host(shell), self.hosts[2])
+
+    def test_skips_down_hosts(self):
+        shell = self.mock_shell_without_control_host()
+        self.hosts[0].is_up = False
+        self.hosts[1].is_up = False
+
+        self.assertIs(CopyTask.get_host(shell), self.hosts[2])
+
+    def test_falls_back_to_a_down_host_when_all_are_down(self):
+        shell = self.mock_shell_without_control_host()
+        for host in self.hosts:
+            host.is_up = False
+
+        self.assertIs(CopyTask.get_host(shell), self.hosts[0])
+
+    def test_warns_when_hosts_span_datacenters(self):
+        shell = self.mock_shell_without_control_host()
+        self.hosts[2].datacenter = 'dc2'
+        self.hosts[3].datacenter = 'dc2'
+
+        self.assertIs(CopyTask.get_host(shell), self.hosts[0])
+        shell.printerr.assert_called_once()
+        message = shell.printerr.call_args[0][0]
+        self.assertIn('10.0.0.1', message)
+        self.assertIn('dc1, dc2', message)
+
+    def test_does_not_warn_for_a_single_datacenter(self):
+        shell = self.mock_shell_without_control_host()
+
+        self.assertIs(CopyTask.get_host(shell), self.hosts[0])
+        shell.printerr.assert_not_called()
+
+    def test_reports_empty_cluster_metadata(self):
+        shell = self.mock_shell_without_control_host()
+        shell.conn.metadata.all_hosts.return_value = []
+
+        self.assertIsNone(CopyTask.get_host(shell))
+        shell.printerr.assert_called_once()
 
 
 class TestExportTask(CopyTaskTest):
