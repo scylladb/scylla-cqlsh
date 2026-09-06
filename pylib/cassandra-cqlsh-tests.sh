@@ -100,8 +100,9 @@ ccm updateconf "user_defined_functions_enabled: true"
 ccm updateconf "scripted_user_defined_functions_enabled: true"
 
 version_from_build=$(ccm node1 versionfrombuild)
-export pre_or_post_cdc=$(python -c """from distutils.version import LooseVersion
-print (\"postcdc\" if LooseVersion(\"${version_from_build}\") >= \"3.8\" else \"precdc\")
+export pre_or_post_cdc=$(python -c """import re
+parts = tuple(int(p) for p in re.findall(r'\d+', \"${version_from_build}\")[:2])
+print (\"postcdc\" if parts >= (3, 8) else \"precdc\")
 """)
 case "${pre_or_post_cdc}" in
     postcdc)
