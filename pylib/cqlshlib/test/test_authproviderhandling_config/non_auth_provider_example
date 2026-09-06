@@ -1,0 +1,5 @@
+; Config that specifies a class that is not an AuthProvider subclass
+
+[auth_provider]
+module = os.path
+classname = join

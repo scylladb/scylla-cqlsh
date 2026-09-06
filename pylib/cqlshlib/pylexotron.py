@@ -16,6 +16,7 @@
 
 """Pylexotron uses Python's re.Scanner module as a simple regex-based tokenizer for BNF production rules"""
 
+import ast
 import re
 import inspect
 import sys
@@ -283,8 +284,8 @@ class TextMatch(TerminalMatcher):
 
     def __init__(self, text):
         try:
-            TerminalMatcher.__init__(self, eval(text))
-        except SyntaxError:
+            TerminalMatcher.__init__(self, ast.literal_eval(text))
+        except (SyntaxError, ValueError):
             print("bad syntax %r" % (text,))
 
     def match(self, ctxt, completions):

@@ -188,3 +188,7 @@ class CustomAuthProviderTest(unittest.TestCase):
                 PlainTextAuthProvider,
                 {"username": 'user3',
                  "password": None})
+
+    def test_non_auth_provider_class_rejected(self):
+        with pytest.raises(TypeError, match="not a subclass of cassandra.auth.AuthProvider"):
+            load_auth_provider(construct_config_path('non_auth_provider_example'))
