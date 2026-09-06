@@ -475,6 +475,7 @@ class Shell(cmd.Cmd):
                  no_compression=False,
                  client_routes_config=None,
                  contact_points=None,
+                 profiles=None,
                  ):
         cmd.Cmd.__init__(self, completekey=completekey)
         self.hostname = hostname
@@ -497,18 +498,19 @@ class Shell(cmd.Cmd):
         self.tracing_enabled = tracing_enabled
         self.page_size = self.default_page_size
         self.expand_enabled = expand_enabled
+        # LOGIN builds a new Cluster from these, so they have to be set even for a subshell
+        # that borrows its parent's connection and never builds one here
+        self.profiles = profiles if profiles is not None else {
+            EXEC_PROFILE_DEFAULT: ExecutionProfile(consistency_level=cassandra.ConsistencyLevel.ONE,
+                                                   request_timeout=request_timeout,
+                                                   row_factory=ordered_dict_factory)
+        }
         if use_conn:
             self.conn = use_conn
         else:
             kwargs = {}
             if protocol_version is not None:
                 kwargs['protocol_version'] = protocol_version
-
-            self.profiles = {
-                EXEC_PROFILE_DEFAULT: ExecutionProfile(consistency_level=cassandra.ConsistencyLevel.ONE,
-                                                       request_timeout=request_timeout,
-                                                       row_factory=ordered_dict_factory)
-            }
 
             if self.is_unix_socket(self.hostname):
                 self.contact_points = (UnixSocketEndPoint(self.hostname),)
@@ -2020,8 +2022,10 @@ class Shell(cmd.Cmd):
                          connect_timeout=self.conn.connect_timeout,
                          is_subshell=True,
                          auth_provider=self.auth_provider,
+                         no_compression=self.no_compression,
                          client_routes_config=self.client_routes_config,
                          contact_points=self.contact_points,
+                         profiles=self.profiles,
                          )
         # duplicate coverage related settings in subshell
         if self.coverage:

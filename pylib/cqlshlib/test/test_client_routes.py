@@ -204,6 +204,8 @@ def test_login_reconnect_preserves_client_routes(cqlsh_module):
 def test_source_subshell_preserves_client_routes(cqlsh_module, tmp_path):
     client_routes_config = object()
     contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+    profiles = {cqlsh_module.EXEC_PROFILE_DEFAULT: cqlsh_module.ExecutionProfile(
+        load_balancing_policy=cqlsh_module.RoundRobinPolicy())}
     source_file = tmp_path / 'source.cql'
     source_file.write_text('COPY test.tbl TO STDOUT;\n')
 
@@ -229,6 +231,8 @@ def test_source_subshell_preserves_client_routes(cqlsh_module, tmp_path):
     parent_shell.auth_provider = None
     parent_shell.client_routes_config = client_routes_config
     parent_shell.contact_points = contact_points
+    parent_shell.profiles = profiles
+    parent_shell.no_compression = True
     parent_shell.coverage = False
     parent_shell.cql_unprotect_value.return_value = str(source_file)
 
@@ -246,4 +250,85 @@ def test_source_subshell_preserves_client_routes(cqlsh_module, tmp_path):
     assert call_kwargs['use_conn'] is parent_shell.conn
     assert call_kwargs['client_routes_config'] is client_routes_config
     assert call_kwargs['contact_points'] == contact_points
+    # the subshell never builds a Cluster itself, but LOGIN inside the sourced file does
+    assert call_kwargs['profiles'] is profiles
+    assert call_kwargs['no_compression'] is True
     subshell.cmdloop.assert_called_once_with()
+
+
+def fake_parent_connection():
+    """
+    A parent Shell connection that a subshell can borrow, answering the version probes
+    Shell.__init__ makes.
+    """
+    conn = MagicMock()
+    session = MagicMock()
+    conn.connect.return_value = session
+    conn.protocol_version = 4
+    conn.cql_version = '3.4.5'
+    conn.connect_timeout = 5
+    conn.metadata.keyspaces = []
+
+    def execute_side_effect(query):
+        if 'system.local' in query:
+            return [{'cql_version': '3.4.5', 'release_version': '4.0.0'}]
+        if 'system.versions' in query:
+            return [{'version': '5.0.0'}]
+        return []
+
+    session.execute.side_effect = execute_side_effect
+    return conn
+
+
+def test_subshell_login_reconnects_with_the_parent_connection_settings(cqlsh_module):
+    """
+    A subshell borrows its parent's connection and never builds a Cluster in __init__, but
+    LOGIN builds one, so the subshell still needs the parent's execution profiles (client
+    routes replace the default whitelist policy with a RoundRobinPolicy) and the parent's
+    compression setting.
+    """
+    client_routes_config = object()
+    contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
+    profiles = {cqlsh_module.EXEC_PROFILE_DEFAULT: cqlsh_module.ExecutionProfile(
+        load_balancing_policy=cqlsh_module.RoundRobinPolicy())}
+
+    subshell = cqlsh_module.Shell('proxy-a.example.com', 9042,
+                                  tty=False,
+                                  encoding='utf-8',
+                                  use_conn=fake_parent_connection(),
+                                  is_subshell=True,
+                                  no_compression=True,
+                                  client_routes_config=client_routes_config,
+                                  contact_points=contact_points,
+                                  profiles=profiles)
+
+    assert subshell.profiles is profiles
+
+    parsed = MagicMock()
+    parsed.get_binding.side_effect = lambda name: {
+        'username': 'alice',
+        'password': "'secret'",
+    }[name]
+
+    with patch.object(cqlsh_module, 'Cluster') as mock_cluster:
+        mock_cluster.return_value.connect.return_value = MagicMock()
+
+        subshell.do_login(parsed)
+
+    call_kwargs = mock_cluster.call_args[1]
+    assert call_kwargs['execution_profiles'] is profiles
+    assert call_kwargs['client_routes_config'] is client_routes_config
+    assert call_kwargs['contact_points'] == contact_points
+    assert call_kwargs['compression'] is False
+    profile = call_kwargs['execution_profiles'][cqlsh_module.EXEC_PROFILE_DEFAULT]
+    assert isinstance(profile.load_balancing_policy, cqlsh_module.RoundRobinPolicy)
+
+
+def test_shell_builds_default_profiles_when_none_are_passed(cqlsh_module):
+    subshell = cqlsh_module.Shell('proxy-a.example.com', 9042,
+                                  tty=False,
+                                  encoding='utf-8',
+                                  use_conn=fake_parent_connection(),
+                                  is_subshell=True)
+
+    assert cqlsh_module.EXEC_PROFILE_DEFAULT in subshell.profiles
