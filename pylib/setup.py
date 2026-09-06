@@ -17,7 +17,7 @@
 
 import os
 import warnings
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
 
 def get_extensions():

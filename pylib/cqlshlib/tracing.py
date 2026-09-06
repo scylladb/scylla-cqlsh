@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 from cassandra.query import QueryTrace, TraceUnavailable
@@ -86,5 +86,6 @@ def total_micro_seconds(td):
 
 def datetime_from_utc_to_local(utc_datetime):
     now_timestamp = time.time()
-    offset = datetime.fromtimestamp(now_timestamp) - datetime.utcfromtimestamp(now_timestamp)
+    utc_now = datetime.fromtimestamp(now_timestamp, timezone.utc).replace(tzinfo=None)
+    offset = datetime.fromtimestamp(now_timestamp) - utc_now
     return utc_datetime + offset

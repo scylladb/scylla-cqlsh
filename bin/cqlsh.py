@@ -37,8 +37,8 @@ from glob import glob
 from io import StringIO
 from uuid import UUID
 
-if sys.version_info < (3, 6):
-    sys.exit("\ncqlsh requires Python 3.6+\n")
+if sys.version_info < (3, 10):
+    sys.exit("\ncqlsh requires Python 3.10+\n")
 
 # see CASSANDRA-10428
 if platform.python_implementation().startswith('Jython'):
