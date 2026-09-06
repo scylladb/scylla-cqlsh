@@ -15,8 +15,46 @@ permissions:
 
 env:
   CIBW_SKIP: cp36* cp37* cp38* cp39* pp*
+  # build cp315 wheels while 3.15 is still a release candidate; no-op once it's final
+  CIBW_ENABLE: cpython-prerelease
+  # Test modules that need a live cluster; the unit test job runs everything else.
+  PYTEST_IGNORE_CLUSTER_TESTS: >-
+    --ignore=./cqlshlib/test/test_cqlsh_completion.py
+    --ignore=./cqlshlib/test/test_cqlsh_output.py
+    --ignore=./cqlshlib/test/test_escape_sequences.py
+    --ignore=./cqlshlib/test/test_formatting.py
+    --ignore=./cqlshlib/test/test_proxy_access.py
+    --ignore=./cqlshlib/test/test_unicode.py
 
 jobs:
+  unit_tests:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: pytest
+        env:
+          # nothing builds the package here, so cqlsh.py falls back to setuptools_scm,
+          # which has no tags to work with in a shallow checkout
+          SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
+        run: |
+          export UV_HTTP_TIMEOUT=120
+          uv pip install --system -r ./pylib/requirements.txt setuptools_scm
+          pytest ./cqlshlib/test ${{ env.PYTEST_IGNORE_CLUSTER_TESTS }}
+
   build_wheels:
     name: Build wheels (${{ matrix.os }})
     if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
@@ -53,11 +91,26 @@ jobs:
           path: dist/*.tar.gz
 
   integration_test_scylla:
-    name: Integration Tests (Scylla)
+    name: Integration Tests (Scylla, Python ${{ matrix.python-version }})
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # oldest and newest interpreters we claim to support
+        python-version: ['3.10', '3.15']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # not uv's interpreter: python-build-standalone links libedit instead of
+      # GNU readline, and the pty-driven completion tests assert on readline's
+      # exact cursor movements
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Start Scylla
         run: |
@@ -72,8 +125,9 @@ jobs:
       - name: pytest
         run: |
           export PIP_RETRIES=10
-          pip install -r ./pylib/requirements.txt
-           ./reloc/build_reloc.sh
+          export UV_HTTP_TIMEOUT=120
+          uv pip install --system -r ./pylib/requirements.txt
+          ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
           ./scripts/run-proxy-access-test.sh
 
@@ -152,7 +206,7 @@ jobs:
             scylladb/scylla-cqlsh:master
 
   upload_pypi:
-    needs: [build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
+    needs: [unit_tests, build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
