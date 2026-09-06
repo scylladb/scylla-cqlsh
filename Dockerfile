@@ -1,4 +1,4 @@
-FROM python:3.13-slim-trixie AS compile-image
+FROM python:3.14-slim-trixie AS compile-image
 
 WORKDIR /usr/src/app
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y install --no-install-recommends git gcc libc6-dev
@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir --upgrade pip==26.1 setuptools==82.0.1 wheel==0.4
 RUN pip install --user .
 
 
-FROM python:3.13-slim-trixie AS build-image
+FROM python:3.14-slim-trixie AS build-image
 
 # Upgrade packages to the latest, pip as well.
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y upgrade && apt-get clean && rm -rf /var/lib/apt/lists/*
