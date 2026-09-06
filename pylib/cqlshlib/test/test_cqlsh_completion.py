@@ -22,9 +22,6 @@ import locale
 import os
 import re
 
-from cassandra import InvalidRequest
-from packaging.version import Version
-
 from .basecase import BaseTestCase
 from .cassconnect import create_db, remove_db, testrun_cqlsh, get_cassandra_connection
 from .run_cqlsh import TimeoutError
@@ -53,12 +50,13 @@ class CqlshCompletionCase(BaseTestCase):
             cls.is_scylla = '1 rows' in output
 
         with get_cassandra_connection().connect() as session:
-            try:
-                result = session.execute("SELECT version FROM system.versions WHERE key = 'local' LIMIT 1")
-                cls.scylla_version = Version(result.one().version.rsplit('.', 2)[0])
-                cls.is_scylla_enterprise = cls.scylla_version > Version('2018.1')
-            except InvalidRequest:
-                cls.is_scylla_enterprise = False
+            # Which of the non-mandatory system keyspaces exist depends on the
+            # server version and flavour (e.g. system_distributed_everywhere is
+            # gone from recent Scylla releases, system_replicated_keys only
+            # exists on enterprise builds), so ask the server rather than
+            # deducing it from the version number.
+            result = session.execute('SELECT keyspace_name FROM system_schema.keyspaces')
+            cls.server_keyspaces = {row.keyspace_name for row in result}
 
     @classmethod
     def tearDownClass(cls):
@@ -75,25 +73,21 @@ class CqlshCompletionCase(BaseTestCase):
     def tearDown(self):
         self.cqlsh_runner.__exit__(None, None, None)
 
-    def _extra_keyspaces(self):
-        keyspaces = []
+    def _optional_scylla_keyspaces(self, *names):
+        """Of the given Scylla-only keyspaces, the ones this server actually has."""
+        if not self.is_scylla:
+            return []
+        return [name for name in names if name in self.server_keyspaces]
 
-        if self.is_scylla:
-            keyspaces += ['audit']
-        return keyspaces
+    def _extra_keyspaces(self):
+        return self._optional_scylla_keyspaces('audit')
 
     def _system_keyspaces(self):
-        tables = []
-
         if self.is_scylla:
-            tables += ['system_distributed_everywhere.']
-            tables += ['audit.']
-            if  self.is_scylla_enterprise:
-                tables += ['system_replicated_keys.']
-        else:
-            tables += ['system_views.', 'system_virtual_schema.']
+            return [name + '.' for name in self._optional_scylla_keyspaces(
+                'system_distributed_everywhere', 'audit', 'system_replicated_keys')]
 
-        return tables
+        return ['system_views.', 'system_virtual_schema.']
 
     def _get_completions(self, inputstring, split_completed_lines=True):
         """
@@ -599,7 +593,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('DROP KEYSPACE ' + quoted_keyspace,
                             choices=[';'])
 
-        if self.is_scylla:
+        if self._extra_keyspaces():
             # With the audit keyspace present, there are multiple keyspaces
             # after IF EXISTS so it can't auto-complete the full thing
             self.trycompletions('DROP KEYSPACE I', immediate='F EXISTS ')
@@ -764,7 +758,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                      'system_traces.', 'songs',
                                      'system_distributed.',
                                      self.cqlsh.keyspace + '.'] +
-                                     (['system_distributed_everywhere.'] if self.is_scylla else []),
+                                     [name + '.' for name in
+                                      self._optional_scylla_keyspaces('system_distributed_everywhere')],
                             other_choices_ok=True)
 
         self.trycompletions('DESC TYPE ',
