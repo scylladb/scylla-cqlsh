@@ -25,6 +25,12 @@ env:
     --ignore=./cqlshlib/test/test_formatting.py
     --ignore=./cqlshlib/test/test_proxy_access.py
     --ignore=./cqlshlib/test/test_unicode.py
+  # Pinned so a PR's integration result depends on the PR, not on when it ran;
+  # Renovate bumps them in their own PRs.
+  # renovate: datasource=docker depName=scylladb/scylla
+  SCYLLA_VERSION: 2026.1.13
+  # renovate: datasource=docker depName=cassandra
+  CASSANDRA_VERSION: 5.0.9
 
 jobs:
   unit_tests:
@@ -114,7 +120,7 @@ jobs:
 
       - name: Start Scylla
         run: |
-          export DOCKER_ID=$(docker run -d scylladb/scylla:latest --cluster-name test )
+          export DOCKER_ID=$(docker run -d scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test )
           export CQL_TEST_HOST=$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${DOCKER_ID})
           while ! nc -z ${CQL_TEST_HOST} 9042; do   
             sleep 0.1 # wait for 1/10 of the second before check again
@@ -140,7 +146,7 @@ jobs:
 
       - name: Start Scylla
         run: |
-          export DOCKER_ID=$(docker run -d -e CASSANDRA_CLUSTER_NAME=test cassandra:5.0 )
+          export DOCKER_ID=$(docker run -d -e CASSANDRA_CLUSTER_NAME=test cassandra:${{ env.CASSANDRA_VERSION }} )
           export CQL_TEST_HOST=$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${DOCKER_ID})
           while ! nc -z ${CQL_TEST_HOST} 9042; do
                   sleep 0.1 # wait for 1/10 of the second before check again
