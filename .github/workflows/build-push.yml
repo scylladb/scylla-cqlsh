@@ -28,7 +28,7 @@ env:
   # Pinned so a PR's integration result depends on the PR, not on when it ran;
   # Renovate bumps them in their own PRs.
   # renovate: datasource=docker depName=scylladb/scylla
-  SCYLLA_VERSION: 2026.1.13
+  SCYLLA_VERSION: 2026.3.1
   # renovate: datasource=docker depName=cassandra
   CASSANDRA_VERSION: 5.0.9
 
