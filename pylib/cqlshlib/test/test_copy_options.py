@@ -110,3 +110,19 @@ class TestCopyOptions(BaseTestCase):
             lines = f.read().splitlines()
         self.assertIn('"1"1"10"', lines)
         self.assertIn('2120', lines)
+
+    def check_null_indicator(self, table, indicator):
+        """
+        Export a table with COPY TO WITH NULL and check that null values are written as the indicator.
+        """
+        self.create_table(table, 'a int PRIMARY KEY, b text')
+        self.insert_rows(table, ('a', 'b'), [(1, 'eggs'), (100, 'sausage')])
+        self.insert_rows(table, ('a',), [(2,), (200,)])
+
+        fname = self.csv_file('exported.csv')
+        self.copy_to(table, fname, "NULL = '%s'" % (indicator,))
+        self.assertEqual(sorted(self.read_csv(fname)),
+                         [['1', 'eggs'], ['100', 'sausage'], ['2', indicator], ['200', indicator]])
+
+    def test_undefined_as_null_indicator(self):
+        self.check_null_indicator('testnullindicator_undefined', 'undefined')
