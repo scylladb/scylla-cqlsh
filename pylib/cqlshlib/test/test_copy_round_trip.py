@@ -198,3 +198,14 @@ class TestCopyToWithFailures(CopyTestCase):
         self.assertNotIn('permanently given up', output)
         self.assertNotIn('some records might be missing', output)
         self.assertEqual(len(self.read_csv(exported)), self.num_rows)
+
+    def test_copy_to_with_child_process_crashing(self):
+        start, end = self.ring_range_with_rows()
+        exported = self.csv_file('exported.csv')
+        # the worker that gets the range exits, so COPY TO stops without the rows of that range
+        failures = {'exit_range': {'start': start, 'end': end}}
+        output = self.run_copy("COPY %s TO '%s'" % (self.table, exported), failures)
+        self.assertRegex(output, r'Child process \d+ died with exit code 1')
+        self.assertIn('some records might be missing', output)
+        # other ranges may be lost with the worker too, so only an upper bound is deterministic
+        self.assertLessEqual(len(self.read_csv(exported)), self.num_rows - self.count_rows_in_range(start, end))
