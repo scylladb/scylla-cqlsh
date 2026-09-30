@@ -124,3 +124,21 @@ class TestCqlshShell(BaseTestCase):
         printed = {int(i): (val1, val2) for _, i, val1, val2 in self.select_rows('SELECT * FROM float_values;')}
         expected = {i: (printed_double, printed_float) for i, (_, _, printed_double, printed_float) in enumerate(rows)}
         self.assertEqual(printed, expected)
+
+    def test_int_values(self):  # CASSANDRA-9399
+        output = self.run_cqlsh("""
+            CREATE TABLE int_values (part text PRIMARY KEY, val1 int, val2 bigint, val3 smallint, val4 tinyint);
+            INSERT INTO int_values (part, val1, val2, val3, val4) VALUES ('1', 1, 1, 1, 1);
+            INSERT INTO int_values (part, val1, val2, val3, val4) VALUES ('0', 0, 0, 0, 0);
+            INSERT INTO int_values (part, val1, val2, val3, val4) VALUES ('min', %d, %d, -32768, -128);
+            INSERT INTO int_values (part, val1, val2, val3, val4) VALUES ('max', %d, %d, 32767, 127);
+            """ % (-1 << 31, -1 << 63, (1 << 31) - 1, (1 << 63) - 1))
+        self.assertEqual(output.strip(), '')
+
+        rows = self.select_rows('SELECT * FROM int_values;')
+        self.assertCountEqual(rows, [
+            ['min', '-2147483648', '-9223372036854775808', '-32768', '-128'],
+            ['max', '2147483647', '9223372036854775807', '32767', '127'],
+            ['0', '0', '0', '0', '0'],
+            ['1', '1', '1', '1', '1'],
+        ])
