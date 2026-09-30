@@ -74,9 +74,10 @@ class TestCopyOptions(BaseTestCase):
     def column_list(columns):
         return ' (%s)' % (', '.join(columns),) if columns else ''
 
-    def copy_from(self, table, fname, options=''):
+    def copy_from(self, table, fname, options='', columns=None):
         # keep the error file out of the working directory
-        cmd = "COPY %s.%s FROM '%s' WITH ERRFILE = '%s'" % (self.ks, table, fname, self.csv_file('import.err'))
+        cmd = "COPY %s.%s%s FROM '%s' WITH ERRFILE = '%s'" % (self.ks, table, self.column_list(columns), fname,
+                                                              self.csv_file('import.err'))
         if options:
             cmd += ' AND ' + options
         return self.run_cqlsh(cmd)
@@ -220,7 +221,6 @@ class TestCopyOptions(BaseTestCase):
         fname = self.csv_file('import.csv')
         self.write_csv(fname, rows)
 
-        self.run_cqlsh("COPY %s.testorder_reading (a, c, b) FROM '%s' WITH ERRFILE = '%s'"
-                       % (self.ks, fname, self.csv_file('import.err')))
+        self.copy_from('testorder_reading', fname, columns=('a', 'c', 'b'))
         self.assertEqual(self.select_rows('SELECT a, b, c FROM %s.testorder_reading'),
                          sorted((a, b, c) for a, c, b in rows))
