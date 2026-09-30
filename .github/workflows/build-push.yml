@@ -19,8 +19,12 @@ env:
   CIBW_ENABLE: cpython-prerelease
   # Test modules that need a live cluster; the unit test job runs everything else.
   PYTEST_IGNORE_CLUSTER_TESTS: >-
+    --ignore=./cqlshlib/test/test_copy_data.py
+    --ignore=./cqlshlib/test/test_copy_options.py
+    --ignore=./cqlshlib/test/test_copy_round_trip.py
     --ignore=./cqlshlib/test/test_cqlsh_completion.py
     --ignore=./cqlshlib/test/test_cqlsh_output.py
+    --ignore=./cqlshlib/test/test_cqlsh_shell.py
     --ignore=./cqlshlib/test/test_escape_sequences.py
     --ignore=./cqlshlib/test/test_formatting.py
     --ignore=./cqlshlib/test/test_proxy_access.py
