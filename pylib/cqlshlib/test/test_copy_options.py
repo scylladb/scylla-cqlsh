@@ -246,3 +246,18 @@ class TestCopyOptions(BaseTestCase):
 
     def test_quoted_column_names_reading_dont_specify_names(self):
         self.check_quoted_column_names_reading('testquoted_reading_no_names', specify_column_names=False)
+
+    def check_quoted_column_names_writing(self, table, specify_column_names):
+        """
+        Export a table whose column names need quoting, with or without naming them.
+        """
+        self.create_table(table, '"IdNumber" int PRIMARY KEY, "select" text')
+        self.insert_rows(table, self.quoted_columns, self.quoted_rows)
+
+        fname = self.csv_file('exported.csv')
+        output = self.copy_to(table, fname, columns=self.quoted_columns if specify_column_names else None)
+        self.assertIn('4 rows exported', output)
+        self.assertEqual(sorted(self.read_csv(fname)), [[str(a), b] for a, b in self.quoted_rows])
+
+    def test_quoted_column_names_writing_specify_names(self):
+        self.check_quoted_column_names_writing('testquoted_writing_names', specify_column_names=True)
