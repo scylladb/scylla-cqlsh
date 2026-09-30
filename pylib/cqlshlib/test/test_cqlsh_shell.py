@@ -243,3 +243,10 @@ class TestCqlshShell(BaseTestCase):
 
     def test_cls(self):  # CASSANDRA-10086
         self.check_clear_screen('CLS')
+
+    def test_batch(self):  # CASSANDRA-10272
+        self.session.execute('CREATE TABLE %s.batch_data (id int PRIMARY KEY)' % (self.ks,))
+        # the ; ending the INSERT must not end the batch
+        output = self.run_cqlsh('BEGIN BATCH INSERT INTO batch_data (id) VALUES (0); APPLY BATCH;')
+        self.assertEqual(output.strip(), '')
+        self.assertEqual(list(self.session.execute('SELECT id FROM %s.batch_data' % (self.ks,))), [(0,)])
