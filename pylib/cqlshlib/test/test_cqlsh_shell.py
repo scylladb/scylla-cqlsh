@@ -242,3 +242,6 @@ class TestCqlshShell(BaseTestCase):
 
     def test_clear(self):  # CASSANDRA-10086
         self.check_clear_screen('CLEAR')
+
+    def test_cls(self):  # CASSANDRA-10086
+        self.check_clear_screen('CLS')
