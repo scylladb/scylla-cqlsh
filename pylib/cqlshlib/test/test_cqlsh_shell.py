@@ -20,11 +20,13 @@
 import datetime
 import os
 import re
+from decimal import Decimal
+from uuid import UUID
 
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.util import Date, Time
 
-from .basecase import BaseTestCase, cqlsh_env_in_utc, dedent
+from .basecase import BaseTestCase, cqlsh_env_in_utc, dedent, test_dir
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
 from .cassconnect import testrun_cqlsh as run_cqlsh_for_test
@@ -250,3 +252,53 @@ class TestCqlshShell(BaseTestCase):
         output = self.run_cqlsh('BEGIN BATCH INSERT INTO batch_data (id) VALUES (0); APPLY BATCH;')
         self.assertEqual(output.strip(), '')
         self.assertEqual(list(self.session.execute('SELECT id FROM %s.batch_data' % (self.ks,))), [(0,)])
+
+    def test_source_glass(self):
+        # glass.cql fills maps of every value type, keyed by "I can eat glass" in four scripts
+        latin = 'Vitrum edere possum, mihi non nocet.'
+        braille = ' ⠊⠀⠉⠁⠝⠀⠑⠁⠞⠀⠛⠇⠁⠎⠎⠀⠁⠝⠙⠀⠊⠞⠀⠙⠕⠑⠎⠝⠞⠀⠓⠥⠗⠞⠀⠍⠑'
+        macedonian = 'Можам да јадам стакло, а не ме штета.'
+        english = 'I can eat glass and it does not hurt me'
+        # the row key; its words are separated by the Ogham space mark, not by spaces
+        ogham = '᚛᚛ᚉᚑᚅᚔᚉᚉᚔᚋ ᚔᚈᚔ ᚍᚂᚐᚅᚑ ᚅᚔᚋᚌᚓᚅᚐ᚜'
+
+        output = self.run_cqlsh("SOURCE '%s';" % (os.path.join(test_dir, 'glass.cql'),))
+        self.assertEqual(output.strip(), '')
+
+        # the values of each map, in the order of the keys above
+        expected = {
+            'varcharasciimap': ('Hello', 'My', 'Name', 'Is'),
+            'varcharbigintmap': (5100003, -45, 12300, 0),
+            'varcharblobmap': (bytes.fromhex('FEED103A'), bytes.fromhex('DEADBEEF'), bytes.fromhex('BEEFBEEF'),
+                               bytes.fromhex('FEEB')),
+            'varcharbooleanmap': (True, False, False, False),
+            'varchardecimalmap': (Decimal('50'), Decimal('-20.4'), Decimal('11234234.3'), Decimal('10.0')),
+            'varchardoublemap': (4234243, -432.311, 3.1415, 20000.0),
+            'varcharfloatmap': (10.0, -234.3000030517578, -234234, 1000.5),
+            'varcharintmap': (1, 2, -3, -500),
+            'varcharinetmap': ('192.168.0.1', '127.0.0.1', '8.8.8.8', '8.8.4.4'),
+            'varchartextmap': ('Once I went', 'On a trip', 'Across', 'The '),
+            'varchartimestampmap': (datetime.datetime(2013, 6, 19, 3, 21, 1), datetime.datetime(1985, 8, 3, 4, 21, 1),
+                                    datetime.datetime(2000, 1, 1, 0, 20, 1), datetime.datetime(1942, 3, 11, 5, 21, 1)),
+            'varcharuuidmap': (UUID('7787064c-ce54-4324-abdd-05775b89ead7'),
+                               UUID('1df0b6ac-f3d3-456c-8b78-2bc70e585107'),
+                               UUID('e2ed2164-31dc-42cb-8ee9-47376e071210'),
+                               UUID('a487fe45-8af5-4454-ac66-2614286d7e89')),
+            'varchartimeuuidmap': (UUID('4a36c100-d8ec-11e2-a28f-0800200c9a66'),
+                                   UUID('670c7f90-d8ec-11e2-a28f-0800200c9a66'),
+                                   UUID('750c2d70-d8ec-11e2-a28f-0800200c9a66'),
+                                   UUID('80d74810-d8ec-11e2-a28f-0800200c9a66')),
+            'varcharvarcharmap': (ogham, braille, macedonian, english),
+            'varcharvarintmap': (1010010101020400204143243, -40, 110230, 1400),
+        }
+        row = self.session.execute('SELECT * FROM %s.varcharmaptable WHERE varcharkey = %%s' % (self.ks,),
+                                   (ogham,)).one()
+        for column, values in expected.items():
+            self.assertEqual(dict(getattr(row, column)), dict(zip((latin, braille, macedonian, english), values)),
+                             msg=column)
+
+        output = self.run_cqlsh('SELECT * FROM varcharmaptable;', args=('--encoding=utf-8',))
+        # each phrase is a key in all 15 maps, and some are values as well
+        self.assertEqual(output.count(macedonian), 16)
+        self.assertEqual(output.count(braille), 16)
+        self.assertEqual(output.count(ogham), 2)
