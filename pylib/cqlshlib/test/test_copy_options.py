@@ -95,9 +95,18 @@ class TestCopyOptions(BaseTestCase):
         self.assertIn('1000 rows exported', output)
         self.assertEqual(sorted(self.read_csv(fname, delimiter=delimiter)),
                          sorted([str(a), str(b)] for a, b in rows))
+        return fname
 
     def test_colon_delimiter(self):
         self.check_delimiter('testdelimiter_colon', ':')
 
     def test_letter_delimiter(self):
         self.check_delimiter('testdelimiter_letter', 'a')
+
+    def test_number_delimiter(self):
+        fname = self.check_delimiter('testdelimiter_number', '1')
+        # values that contain the delimiter are quoted
+        with open(fname, encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        self.assertIn('"1"1"10"', lines)
+        self.assertIn('2120', lines)
