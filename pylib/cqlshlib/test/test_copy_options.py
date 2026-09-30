@@ -261,3 +261,6 @@ class TestCopyOptions(BaseTestCase):
 
     def test_quoted_column_names_writing_specify_names(self):
         self.check_quoted_column_names_writing('testquoted_writing_names', specify_column_names=True)
+
+    def test_quoted_column_names_writing_dont_specify_names(self):
+        self.check_quoted_column_names_writing('testquoted_writing_no_names', specify_column_names=False)
