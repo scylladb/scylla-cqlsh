@@ -21,6 +21,7 @@ import bisect
 import csv
 import json
 import os
+import re
 import subprocess
 import tempfile
 
@@ -204,3 +205,43 @@ class TestCopyToWithFailures(CopyTestCase):
         self.assertIn('some records might be missing', output)
         # other ranges may be lost with the worker too, so only an upper bound is deterministic
         self.assertLessEqual(len(self.read_csv(exported)), self.num_rows - self.count_rows_in_range(start, end))
+
+
+class TestCopyFromWithFailures(CopyTestCase):
+    """
+    Ported from the dtest COPY FROM failure injection tests (CASSANDRA-9302). The worker processes send
+    a failing batch to a table that does not exist, or exit on an exit batch. With a CHUNKSIZE of 1 every
+    chunk, and so every batch, holds one row, and batch n holds the n-th row of the csv file.
+    """
+
+    failing_batch_id = 30
+
+    def setUp(self):
+        super().setUp()
+        self.exported = self.csv_file('exported.csv')
+        self.run_copy("COPY %s TO '%s'" % (self.table, self.exported), {})
+        with open(self.exported, newline='') as f:
+            self.failing_row = list(csv.reader(f))[self.failing_batch_id - 1]
+        self.session.execute('TRUNCATE %s' % (self.table,))
+
+    def copy_from(self, failures, options=''):
+        self.errfile = self.csv_file('import.err')
+        return self.run_copy("COPY %s FROM '%s' WITH CHUNKSIZE = 1 AND ERRFILE = '%s'%s"
+                             % (self.table, self.exported, self.errfile, options), failures)
+
+    def row_exists(self, row):
+        return self.session.execute('SELECT * FROM %s WHERE k = %s' % (self.table, row[0])).one() is not None
+
+    def test_copy_from_with_more_failures_than_max_attempts(self):
+        # the batch fails on the three attempts COPY FROM makes, so it gives up on it
+        failures = {'failing_batch': {'id': self.failing_batch_id, 'failures': 5}}
+        output = self.copy_from(failures, ' AND MAXATTEMPTS = 3')
+        self.assertIn('will retry later, attempt 2 of 3', output)
+        self.assertIn('given up after 3 attempts', output)
+        # cqlsh appends the pid of the cqlsh process to the name of the error file
+        written_to = re.search(r'Failed to process 1 rows; failed rows written to (%s\.pid\d+)'
+                               % (re.escape(self.errfile),), output)
+        self.assertIsNotNone(written_to, output)
+        self.assertEqual(self.read_csv(written_to.group(1)), [self.failing_row])
+        self.assertEqual(self.count_rows(), self.num_rows - 1)
+        self.assertFalse(self.row_exists(self.failing_row))
