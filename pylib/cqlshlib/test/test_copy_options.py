@@ -183,3 +183,20 @@ class TestCopyOptions(BaseTestCase):
         self.copy_to('testtimeformat', fname, "DATETIMEFORMAT = '%Y/%m/%d %H:%M'")
         self.assertEqual(sorted(self.read_csv(fname)),
                          [['1', '2015/01/01 07:00'], ['2', '2015/06/10 12:30'], ['3', '2015/12/31 23:59']])
+
+    def test_reading_with_ttl(self):
+        # CASSANDRA-9494
+        self.create_table('testttl', 'a int PRIMARY KEY, b int')
+        rows = [(1, 20), (2, 40), (3, 60), (4, 80)]
+        fname = self.csv_file('import.csv')
+        self.write_csv(fname, rows)
+
+        ttl = 3600
+        self.copy_from('testttl', fname, 'TTL = %d' % (ttl,))
+        # check the TTL of the imported cells instead of waiting for them to expire
+        imported = self.select_rows('SELECT a, b, TTL(b) FROM %s.testttl')
+        self.assertEqual([(a, b) for a, b, _ in imported], rows)
+        for _, _, remaining in imported:
+            self.assertIsNotNone(remaining)
+            self.assertGreater(remaining, 0)
+            self.assertLessEqual(remaining, ttl)
