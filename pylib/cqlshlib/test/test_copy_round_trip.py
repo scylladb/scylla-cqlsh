@@ -17,9 +17,11 @@
 # to configure behavior, define $CQL_TEST_HOST to the destination address
 # and $CQL_TEST_PORT to the associated port.
 
+import bisect
 import csv
 import json
 import os
+import subprocess
 import tempfile
 
 from cassandra.concurrent import execute_concurrent_with_args
@@ -27,19 +29,18 @@ from cassandra.metadata import MAX_LONG
 
 from .basecase import BaseTestCase
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
-from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
+from .run_cqlsh import CqlshRunner
 
 
-class TestCopyRoundTripWithRetries(BaseTestCase):
+class CopyTestCase(BaseTestCase):
     """
-    Replaces the dtest test_bulk_round_trip_with_timeouts (CASSANDRA-9302), which set short server
-    timeouts and hoped COPY would retry; on fast machines it never did. Here the failures are injected
-    through CQLSH_COPY_TEST_FAILURES, so COPY TO and COPY FROM retry on every run, and the round trip
-    must still export and import every row.
+    Creates a keyspace per class with a simple table that every test fills with num_rows rows, and runs
+    COPY commands with failures injected through CQLSH_COPY_TEST_FAILURES.
     """
 
     num_rows = 1000
-    max_attempts = 3
+    # a COPY that hangs, for example waiting on a dead child process, fails the test instead of blocking the suite
+    copy_timeout = 300
 
     @classmethod
     def setUpClass(cls):
@@ -71,8 +72,14 @@ class TestCopyRoundTripWithRetries(BaseTestCase):
         """
         env = os.environ.copy()
         env['CQLSH_COPY_TEST_FAILURES'] = json.dumps(failures)
-        output, _ = call_cqlsh_for_test(input=cmd + ';\n', env=env)
-        return output
+        runner = CqlshRunner(keyspace=get_keyspace(), prompt=None, tty=False, env=env)
+        try:
+            output, _ = runner.proc.communicate((cmd + ';\n').encode('utf-8'), timeout=self.copy_timeout)
+        except subprocess.TimeoutExpired:
+            runner.proc.kill()
+            runner.proc.communicate()
+            self.fail('%s did not finish in %d seconds' % (cmd, self.copy_timeout))
+        return output.decode('utf-8')
 
     def csv_file(self, name):
         return os.path.join(self.tmpdir, name)
@@ -83,6 +90,17 @@ class TestCopyRoundTripWithRetries(BaseTestCase):
 
     def count_rows(self):
         return self.session.execute('SELECT COUNT(*) FROM %s' % (self.table,)).one()[0]
+
+
+class TestCopyRoundTripWithRetries(CopyTestCase):
+    """
+    Replaces the dtest test_bulk_round_trip_with_timeouts (CASSANDRA-9302), which set short server
+    timeouts and hoped COPY would retry; on fast machines it never did. Here the failures are injected
+    through CQLSH_COPY_TEST_FAILURES, so COPY TO and COPY FROM retry on every run, and the round trip
+    must still export and import every row.
+    """
+
+    max_attempts = 3
 
     def copy_to_with_retries(self, fname):
         # the token ranges in the upper half of the ring fail before being exported
@@ -128,3 +146,38 @@ class TestCopyRoundTripWithRetries(BaseTestCase):
         self.assertIn('given up after %d attempts' % (self.max_attempts,), output)
         # only the rows of the failing batch are missing
         self.assertEqual(self.count_rows(), self.num_rows - 10)
+
+
+class TestCopyToWithFailures(CopyTestCase):
+    """
+    Ported from the dtest COPY TO failure injection tests (CASSANDRA-9304). The worker processes run the
+    export query of a failing range against a table that does not exist, or exit on an exit range.
+    """
+
+    def ring_range_with_rows(self):
+        """
+        Return a (start, end] range of the ring that holds at least one row. cqlsh never injects failures
+        in the first and the last range of the ring, whose start or end token is None, so skip those.
+        """
+        tokens = sorted(t.value for t in self.cluster.metadata.token_map.ring)
+        for row in self.session.execute('SELECT token(k) FROM %s' % (self.table,)):
+            i = bisect.bisect_left(tokens, row[0])
+            if 0 < i < len(tokens) and tokens[i - 1] != 0:
+                return tokens[i - 1], tokens[i]
+        self.fail('no row in the inner ranges of the ring %s' % (tokens,))
+
+    def count_rows_in_range(self, start, end):
+        return self.session.execute('SELECT COUNT(*) FROM %s WHERE token(k) > %d AND token(k) <= %d'
+                                    % (self.table, start, end)).one()[0]
+
+    def test_copy_to_with_more_failures_than_max_attempts(self):
+        start, end = self.ring_range_with_rows()
+        exported = self.csv_file('exported.csv')
+        # the range fails on the three attempts COPY TO makes, so it gives up on it
+        failures = {'failing_range': {'start': start, 'end': end, 'num_failures': 5}}
+        output = self.run_copy("COPY %s TO '%s' WITH MAXATTEMPTS = 3" % (self.table, exported), failures)
+        self.assertIn('will try again later attempt 2 of 3', output)
+        self.assertIn('permanently given up after 0 rows and 3 attempts', output)
+        self.assertIn('some records might be missing', output)
+        # only the rows of the failing range are missing
+        self.assertEqual(len(self.read_csv(exported)), self.num_rows - self.count_rows_in_range(start, end))
