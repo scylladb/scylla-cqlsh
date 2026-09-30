@@ -126,3 +126,6 @@ class TestCopyOptions(BaseTestCase):
 
     def test_undefined_as_null_indicator(self):
         self.check_null_indicator('testnullindicator_undefined', 'undefined')
+
+    def test_null_as_null_indicator(self):
+        self.check_null_indicator('testnullindicator_null', 'null')
