@@ -24,7 +24,7 @@ import re
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.util import Date, Time
 
-from .basecase import BaseTestCase
+from .basecase import BaseTestCase, dedent
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
 
@@ -173,3 +173,23 @@ class TestCqlshShell(BaseTestCase):
             ['9999-01-01', '02:00:00.000000000'],
             ['2932897', '03:00:00.000000000'],
         ])
+
+    def test_tracing(self):  # CASSANDRA-9399
+        # checks that tracing does not break the query output; the trace itself comes from the server
+        self.session.execute('CREATE TABLE %s.tracing_values (id int PRIMARY KEY, val text)' % (self.ks,))
+        for i, val in enumerate(('adfad', 'lkjlk', 'iuiou'), start=1):
+            self.session.execute("INSERT INTO %s.tracing_values (id, val) VALUES (%d, '%s')" % (self.ks, i, val))
+
+        output = self.run_cqlsh('TRACING ON; SELECT * FROM tracing_values;')
+        self.assertIn('Now Tracing is enabled', output)
+        self.assertIn(dedent("""
+             id | val
+            ----+-------
+              1 | adfad
+              2 | lkjlk
+              3 | iuiou
+
+            (3 rows)
+
+            Tracing session: """), output)
+        self.assertRegex(output, r'activity\s+\| timestamp\s+\| source\s+\| source_elapsed\s+\| client')
