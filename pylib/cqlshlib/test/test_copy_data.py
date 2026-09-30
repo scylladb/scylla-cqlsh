@@ -373,3 +373,21 @@ class TestCopySource(CopyTestCase):
                                   "AND ERRFILE = '%s';\n" % (self.ks, fname, self.csv_file('import.err')))
         self.assertIn('%d rows imported from 1 files' % (self.num_rows,), output)
         self.assertEqual(self.select_all(table), rows)
+
+
+class TestCopyFromCounters(CopyTestCase):
+    """
+    COPY FROM into counter tables, which it writes with counter updates rather than inserts.
+    """
+
+    def read_counters(self, *options):
+        table = self.create_table('testcounter', 'a int, b text, c counter, PRIMARY KEY (a, b)')
+        data = [(1, '1', 20), (2, '2', 40), (3, '3', 60), (4, '4', 80)]
+        fname = self.write_csv('data.csv', [('a', 'b', 'c')] + data)
+
+        output = self.copy_from(table, fname, ' AND '.join(('HEADER = true',) + options))
+        self.assertIn('4 rows imported from 1 files', output)
+        self.assertEqual(self.select_all(table), data)
+
+    def test_reading_counter(self):
+        self.read_counters()
