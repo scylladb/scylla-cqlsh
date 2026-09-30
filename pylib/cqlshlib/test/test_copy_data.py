@@ -20,6 +20,7 @@
 import csv
 import os
 import tempfile
+from uuid import uuid4
 
 from .basecase import BaseTestCase
 from .cassconnect import create_keyspace, get_cassandra_connection, remove_db
@@ -115,3 +116,6 @@ class TestCopyFromValidation(CopyTestCase):
 
     def test_read_invalid_float(self):
         self.validate_on_read(2.14, expect_invalid=True)
+
+    def test_read_invalid_uuid(self):
+        self.validate_on_read(uuid4(), expect_invalid=True)
