@@ -112,3 +112,6 @@ class TestCopyFromValidation(CopyTestCase):
 
     def test_read_valid_data(self):
         self.validate_on_read(2, expect_invalid=False)
+
+    def test_read_invalid_float(self):
+        self.validate_on_read(2.14, expect_invalid=True)
