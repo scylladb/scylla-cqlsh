@@ -302,3 +302,10 @@ class TestCqlshShell(BaseTestCase):
         self.assertEqual(output.count(macedonian), 16)
         self.assertEqual(output.count(braille), 16)
         self.assertEqual(output.count(ogham), 2)
+
+    def test_describe_on_non_reserved_keywords(self):  # CASSANDRA-9232
+        # map is a CQL keyword, but not a reserved one, so the cqlsh grammar must accept it as a table name
+        self.session.execute('CREATE TABLE %s.map (key int PRIMARY KEY, val text)' % (self.ks,))
+        output = self.run_cqlsh('DESCRIBE map;')
+        self.assertIn('CREATE TABLE %s.map (' % (self.ks,), output)
+        self.assertNotIn('Error', output)
