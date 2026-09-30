@@ -394,3 +394,16 @@ class TestCopyFromCounters(CopyTestCase):
 
     def test_reading_counter_without_batching(self):
         self.read_counters('MAXBATCHSIZE = 1')
+
+    def test_reading_counters_with_skip_cols(self):
+        table = self.create_table('testskipcols', 'a int PRIMARY KEY, b counter, c counter, d counter, e counter')
+        fname = self.write_csv('data.csv', [(1, 1, 1, 1, 1), (2, 1, 1, 1, 1)])
+
+        # the table is not truncated between imports: every import adds 1 to the counters it does not skip
+        for skip_cols, expected in (('c, d, e', (1, None, None, None)),
+                                    ('b', (1, 1, 1, 1)),
+                                    ('b', (1, 2, 2, 2)),
+                                    ('e', (2, 3, 3, 2))):
+            output = self.copy_from(table, fname, "SKIPCOLS = '%s'" % (skip_cols,))
+            self.assertIn('2 rows imported from 1 files', output)
+            self.assertEqual(self.select_all(table), [(1,) + expected, (2,) + expected])
