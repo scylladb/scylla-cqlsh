@@ -21,6 +21,9 @@ import datetime
 import os
 import re
 
+from cassandra.concurrent import execute_concurrent_with_args
+from cassandra.util import Date, Time
+
 from .basecase import BaseTestCase
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
@@ -143,4 +146,30 @@ class TestCqlshShell(BaseTestCase):
             ['max', '2147483647', '9223372036854775807', '32767', '127'],
             ['0', '0', '0', '0', '0'],
             ['1', '1', '1', '1', '1'],
+        ])
+
+    def test_datetime_values(self):  # CASSANDRA-9399
+        self.session.execute('CREATE TABLE %s.datetime_values (d date, t time, PRIMARY KEY (d, t))' % (self.ks,))
+        insert = self.session.prepare('INSERT INTO %s.datetime_values (d, t) VALUES (?, ?)' % (self.ks,))
+        # the servers do not parse the same literals for years 0 and 10000, so the dates are sent as day counts
+        execute_concurrent_with_args(self.session, insert, [
+            (Date(-719528), Time('00:00:00.000000000')),  # 0000-01-01
+            (Date(datetime.date(datetime.MINYEAR, 1, 1)), Time('01:00:00.000000000')),
+            (Date(datetime.date(1582, 1, 1)), Time('00:00:00.000000000')),
+            (Date(datetime.date(2015, 5, 14)), Time('16:30:00.555555555')),
+            (Date(datetime.date(9800, 12, 31)), Time('23:59:59.999999999')),
+            (Date(datetime.date(datetime.MAXYEAR, 1, 1)), Time('02:00:00.000000000')),
+            (Date(2932897), Time('03:00:00.000000000')),  # 10000-01-01
+        ])
+
+        rows = self.select_rows('SELECT * FROM datetime_values;')
+        self.assertCountEqual(rows, [
+            # outside of Python's datetime range, a date is printed as its number of days since the epoch
+            ['-719528', '00:00:00.000000000'],
+            ['0001-01-01', '01:00:00.000000000'],
+            ['1582-01-01', '00:00:00.000000000'],
+            ['2015-05-14', '16:30:00.555555555'],
+            ['9800-12-31', '23:59:59.999999999'],
+            ['9999-01-01', '02:00:00.000000000'],
+            ['2932897', '03:00:00.000000000'],
         ])
