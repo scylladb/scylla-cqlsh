@@ -20,10 +20,13 @@
 import csv
 import datetime
 import os
+import random
 import tempfile
 from collections import namedtuple
 from decimal import Decimal
 from uuid import UUID, uuid4
+
+from cassandra.concurrent import execute_concurrent_with_args
 
 from .basecase import BaseTestCase, cqlsh_env_in_utc
 from .cassconnect import create_keyspace, get_cassandra_connection, remove_db
@@ -299,3 +302,30 @@ class TestCopyAllDatatypes(CopyTestCase):
         output = self.copy_from(self.table, fname)
         self.assertIn('1 rows imported from 1 files', output)
         self.assertEqual(self.select_all(self.table), expected_rows)
+
+
+class TestCopyToCollections(CopyTestCase):
+    """
+    COPY TO must write each row of a collection column in the CQL literal format cqlsh prints.
+    """
+
+    num_rows = 1000
+
+    def random_uuids(self, rng, n):
+        return [UUID(int=rng.getrandbits(128), version=4) for _ in range(n)]
+
+    def export_sorted(self, table):
+        fname = self.csv_file('exported.csv')
+        output = self.run_cqlsh("COPY %s TO '%s';" % (table, fname))
+        self.assertIn('%d rows exported to 1 files' % (self.num_rows,), output)
+        return sorted(self.read_csv(fname), key=lambda row: int(row[0]))
+
+    def test_list_data(self):
+        table = self.create_table('testlist', 'a int PRIMARY KEY, b list<uuid>')
+        rng = random.Random(0)
+        args = [(i, self.random_uuids(rng, rng.randint(1, 5))) for i in range(self.num_rows)]
+        insert = self.session.prepare('INSERT INTO %s (a, b) VALUES (?, ?)' % (table,))
+        execute_concurrent_with_args(self.session, insert, args)
+
+        expected = [[str(a), '[%s]' % (', '.join(str(u) for u in b),)] for a, b in args]
+        self.assertEqual(self.export_sorted(table), expected)
