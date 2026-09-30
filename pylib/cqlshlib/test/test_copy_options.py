@@ -18,6 +18,7 @@
 # and $CQL_TEST_PORT to the associated port.
 
 import csv
+import datetime
 import os
 import tempfile
 
@@ -58,6 +59,8 @@ class TestCopyOptions(BaseTestCase):
         whenever it prints an error, so the tests check the output and the data instead.
         """
         env = os.environ.copy()
+        # COPY TO writes timestamps in the client time zone
+        env['TZ'] = 'UTC'
         output, _ = call_cqlsh_for_test(input=cmd + ';\n', env=env)
         return output
 
@@ -165,3 +168,18 @@ class TestCopyOptions(BaseTestCase):
         self.assertIn('4 rows imported', output)
         self.assertNotIn('Failed', output)
         self.assertEqual(self.select_rows('SELECT a, b FROM %s.testheader_reading'), rows)
+
+    def test_writing_with_timeformat(self):
+        # CASSANDRA-10633
+        self.create_table('testtimeformat', 'a int PRIMARY KEY, b timestamp')
+        utc = datetime.timezone.utc
+        self.insert_rows('testtimeformat', ('a', 'b'), [
+            (1, datetime.datetime(2015, 1, 1, 7, 0, 0, 0, utc)),
+            (2, datetime.datetime(2015, 6, 10, 12, 30, 30, 500, utc)),
+            (3, datetime.datetime(2015, 12, 31, 23, 59, 59, 999, utc)),
+        ])
+
+        fname = self.csv_file('exported.csv')
+        self.copy_to('testtimeformat', fname, "DATETIMEFORMAT = '%Y/%m/%d %H:%M'")
+        self.assertEqual(sorted(self.read_csv(fname)),
+                         [['1', '2015/01/01 07:00'], ['2', '2015/06/10 12:30'], ['3', '2015/12/31 23:59']])
