@@ -129,3 +129,14 @@ class TestCopyOptions(BaseTestCase):
 
     def test_null_as_null_indicator(self):
         self.check_null_indicator('testnullindicator_null', 'null')
+
+    def test_writing_use_header(self):
+        self.create_table('testheader_writing', 'a int PRIMARY KEY, b int')
+        self.insert_rows('testheader_writing', ('a', 'b'), [(1, 10), (2, 20), (3, 30)])
+
+        fname = self.csv_file('exported.csv')
+        self.copy_to('testheader_writing', fname, 'HEADER = true')
+        rows = self.read_csv(fname)
+        # the header comes first, followed by the rows in token order
+        self.assertEqual(rows[0], ['a', 'b'])
+        self.assertEqual(sorted(rows[1:]), [['1', '10'], ['2', '20'], ['3', '30']])
