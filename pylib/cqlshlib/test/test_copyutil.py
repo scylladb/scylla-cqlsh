@@ -23,11 +23,12 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from cassandra import ConsistencyLevel, OperationTimedOut, WriteTimeout, WriteType
 from cassandra.metadata import MIN_LONG, Murmur3Token
-from cassandra.policies import WhiteListRoundRobinPolicy
+from cassandra.policies import RetryPolicy, WhiteListRoundRobinPolicy
 
-from cqlshlib.copyutil import (CopyTask, ExportProcess, ExportTask, FastTokenAwarePolicy, ImportProcess, ImportTask,
-                               ImportTaskError)
+from cqlshlib.copyutil import (CopyTask, ExpBackoffRetryPolicy, ExportProcess, ExportTask, FastTokenAwarePolicy,
+                               ImportProcess, ImportProcessResult, ImportTask, ImportTaskError)
 
 
 Default = object()
@@ -578,3 +579,171 @@ class TestImportTask(CopyTaskTest):
                 self.assertEqual(rows[2], ['row3val1', 'row3val2'])
 
             import_task.close()
+
+
+class ScriptedFuture(object):
+    """
+    Stands in for a driver ResponseFuture, completing as soon as callbacks are attached.
+    """
+
+    def __init__(self, error):
+        self.error = error
+
+    def add_callbacks(self, callback, callback_args, errback, errback_args):
+        if self.error is None:
+            callback(None, *callback_args)
+        else:
+            errback(self.error, *errback_args)
+
+
+class ScriptedSession(object):
+    """
+    Stands in for the worker's driver session: requests fail with the given errors, in order,
+    and succeed once the errors run out.
+    """
+
+    def __init__(self, errors):
+        self.errors = list(errors)
+        self.executed = []
+
+    def execute_async(self, statement):
+        self.executed.append(statement)
+        return ScriptedFuture(self.errors.pop(0) if self.errors else None)
+
+
+def write_timeout():
+    return WriteTimeout('Operation timed out - received only 0 responses.',
+                        consistency=ConsistencyLevel.ONE, required_responses=1, received_responses=0,
+                        write_type=WriteType.UNLOGGED_BATCH)
+
+
+class TestImportRetries(CopyTaskTest):
+    """
+    Deterministic replacement for the dtest test_bulk_round_trip_with_timeouts (CASSANDRA-9302),
+    which relied on short server timeouts and never saw a retry on fast machines. Here the worker's
+    session times out on purpose, so the COPY FROM retry path runs on every machine.
+    """
+
+    rows = [['1', 'a'], ['2', 'b'], ['3', 'c']]
+
+    def make_import(self, maxattempts, errors):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        self.shell = self.mock_shell()
+        opts = {'maxattempts': maxattempts, 'errfile': os.path.join(tmpdir.name, 'import.err')}
+        import_task = ImportTask(self.shell, self.ks, self.table, self.columns, self.fname, opts,
+                                 self.protocol_version, self.config_file)
+        self.addCleanup(import_task.close)
+
+        import_process = ImportProcess(import_task.update_params(import_task.make_params(), 0))
+        import_process._session = ScriptedSession(errors)
+        import_process.outmsg = Mock()
+        import_process.make_statement = lambda query, conv, chunk, batch, replicas: (batch['id'], batch['attempts'])
+        return import_task, import_process
+
+    def send_chunk(self, import_process):
+        """
+        Send one chunk as a single batch, the way ImportProcess.inner_run() does.
+        """
+        chunk = {'id': 1, 'rows': self.rows, 'imported': 0, 'num_rows_sent': len(self.rows)}
+        batch = ImportProcess.make_batch(chunk['id'], self.rows)
+        replicas = [self.hosts[0]]
+        statement = import_process.make_statement(None, None, chunk, batch, replicas)
+        future = import_process.session.execute_async(statement)
+        future.add_callbacks(callback=import_process.result_callback, callback_args=(batch, chunk),
+                             errback=import_process.err_callback, errback_args=(batch, chunk, replicas))
+        return chunk
+
+    @staticmethod
+    def sent_messages(import_process):
+        return [c.args[0] for c in import_process.outmsg.send.call_args_list]
+
+    def handle_errors(self, import_task, messages):
+        """
+        Pass the worker's errors to the parent's error handler, as ImportTask.receive_results() does.
+        """
+        for msg in messages:
+            if isinstance(msg, ImportTaskError):
+                import_task.error_handler.handle_error(msg)
+        return [c.args[0] for c in self.shell.printerr.call_args_list]
+
+    def test_retries_timeouts_until_the_batch_is_imported(self):
+        import_task, import_process = self.make_import(maxattempts=3,
+                                                       errors=[write_timeout(), OperationTimedOut('client timeout')])
+        chunk = self.send_chunk(import_process)
+
+        self.assertEqual(import_process.session.executed, [(1, 1), (1, 2), (1, 3)])
+        errors, results = self.sent_messages(import_process)[:2], self.sent_messages(import_process)[2:]
+        self.assertEqual([(e.name, e.attempts, e.final) for e in errors],
+                         [('WriteTimeout', 1, False), ('OperationTimedOut', 2, False)])
+        self.assertEqual([type(r) for r in results], [ImportProcessResult])
+        self.assertEqual(results[0].imported, len(self.rows))
+        self.assertEqual(chunk['imported'], len(self.rows))
+
+        printed = self.handle_errors(import_task, errors)
+        self.assertEqual(len(printed), 2)
+        self.assertIn('will retry later, attempt 1 of 3', printed[0])
+        self.assertIn('will retry later, attempt 2 of 3', printed[1])
+        self.assertEqual(import_task.error_handler.insert_errors, 0)
+        self.assertEqual(import_task.error_handler.num_rows_failed, 0)
+
+    def test_gives_up_when_every_attempt_times_out(self):
+        import_task, import_process = self.make_import(maxattempts=3, errors=[write_timeout()] * 3)
+        chunk = self.send_chunk(import_process)
+
+        self.assertEqual(import_process.session.executed, [(1, 1), (1, 2), (1, 3)])
+        messages = self.sent_messages(import_process)
+        errors = [m for m in messages if isinstance(m, ImportTaskError)]
+        self.assertEqual([(e.name, e.attempts, e.final) for e in errors],
+                         [('WriteTimeout', 1, False), ('WriteTimeout', 2, False), ('WriteTimeout', 3, True)])
+        # the chunk is still accounted for, so the parent does not wait for it forever
+        self.assertIsInstance(messages[-1], ImportProcessResult)
+        self.assertEqual(chunk['imported'], len(self.rows))
+
+        printed = self.handle_errors(import_task, errors)
+        self.assertIn('will retry later, attempt 2 of 3', printed[1])
+        self.assertIn('given up after 3 attempts', printed[2])
+        self.assertEqual(import_task.error_handler.insert_errors, len(self.rows))
+        with open(import_task.error_handler.err_filename) as f:
+            self.assertEqual(list(csv.reader(f)), self.rows)
+
+    def test_ignores_a_late_client_timeout_for_an_imported_chunk(self):
+        # the driver can report a client timeout for rows already written (PYTHON-652)
+        _, import_process = self.make_import(maxattempts=3, errors=[])
+        chunk = self.send_chunk(import_process)
+        import_process.outmsg.reset_mock()
+
+        batch = ImportProcess.make_batch(chunk['id'], self.rows)
+        import_process.err_callback(OperationTimedOut('late timeout'), batch, chunk, [self.hosts[0]])
+
+        self.assertEqual(len(import_process.session.executed), 1)
+        import_process.outmsg.send.assert_not_called()
+
+
+class TestExpBackoffRetryPolicy(unittest.TestCase):
+    """
+    COPY TO retries server read timeouts through this policy, backing off between attempts.
+    """
+
+    def setUp(self):
+        self.policy = ExpBackoffRetryPolicy(Mock(max_attempts=3))
+
+    def test_retries_timeouts_with_backoff_up_to_max_attempts(self):
+        decisions = []
+        with patch('cqlshlib.copyutil.randint', side_effect=lambda low, high: high) as mock_randint, \
+                patch('cqlshlib.copyutil.time.sleep') as mock_sleep:
+            for retry_num in range(4):
+                decisions.append(self.policy.on_read_timeout(None, ConsistencyLevel.ONE, 1, 0, False, retry_num))
+
+        self.assertEqual(decisions, [(RetryPolicy.RETRY, ConsistencyLevel.ONE)] * 3 + [(RetryPolicy.RETHROW, None)])
+        # the delay is drawn from [0, 2^(retry_num + 1) - 1] seconds
+        self.assertEqual([c.args for c in mock_randint.call_args_list], [(0, 1), (0, 3), (0, 7)])
+        self.assertEqual([c.args for c in mock_sleep.call_args_list], [(1,), (3,), (7,)])
+
+    def test_retries_immediately_on_a_zero_delay(self):
+        with patch('cqlshlib.copyutil.randint', return_value=0), \
+                patch('cqlshlib.copyutil.time.sleep') as mock_sleep:
+            decision = self.policy.on_write_timeout(None, ConsistencyLevel.ONE, 'SIMPLE', 1, 0, 0)
+
+        self.assertEqual(decision, (RetryPolicy.RETRY, ConsistencyLevel.ONE))
+        mock_sleep.assert_not_called()
