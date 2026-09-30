@@ -67,12 +67,26 @@ class TestCopyOptions(BaseTestCase):
             cmd += ' WITH ' + options
         return self.run_cqlsh(cmd)
 
+    def copy_from(self, table, fname, options=''):
+        # keep the error file out of the working directory
+        cmd = "COPY %s.%s FROM '%s' WITH ERRFILE = '%s'" % (self.ks, table, fname, self.csv_file('import.err'))
+        if options:
+            cmd += ' AND ' + options
+        return self.run_cqlsh(cmd)
+
     def csv_file(self, name):
         return os.path.join(self.tmpdir, name)
 
     def read_csv(self, fname, **fmtparams):
         with open(fname, newline='', encoding='utf-8') as f:
             return list(csv.reader(f, **fmtparams))
+
+    def write_csv(self, fname, rows):
+        with open(fname, 'w', newline='', encoding='utf-8') as f:
+            csv.writer(f).writerows(rows)
+
+    def select_rows(self, query):
+        return sorted(tuple(row) for row in self.session.execute(query % (self.ks,)))
 
     def create_table(self, table, columns):
         self.session.execute('CREATE TABLE %s.%s (%s)' % (self.ks, table, columns))
@@ -140,3 +154,14 @@ class TestCopyOptions(BaseTestCase):
         # the header comes first, followed by the rows in token order
         self.assertEqual(rows[0], ['a', 'b'])
         self.assertEqual(sorted(rows[1:]), [['1', '10'], ['2', '20'], ['3', '30']])
+
+    def test_reading_use_header(self):
+        self.create_table('testheader_reading', 'a int PRIMARY KEY, b int')
+        rows = [(1, 20), (2, 40), (3, 60), (4, 80)]
+        fname = self.csv_file('import.csv')
+        self.write_csv(fname, [('a', 'b')] + rows)
+
+        output = self.copy_from('testheader_reading', fname, 'HEADER = true')
+        self.assertIn('4 rows imported', output)
+        self.assertNotIn('Failed', output)
+        self.assertEqual(self.select_rows('SELECT a, b FROM %s.testheader_reading'), rows)
