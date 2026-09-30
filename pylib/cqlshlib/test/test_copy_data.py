@@ -339,3 +339,35 @@ class TestCopyToCollections(CopyTestCase):
 
         expected = [[str(a), '(%s)' % (', '.join(str(u) for u in b),)] for a, b in args]
         self.assertEqual(self.export_sorted(table), expected)
+
+
+class TestCopySource(CopyTestCase):
+    """
+    COPY must work when it runs from a file read with SOURCE (CASSANDRA-9083).
+    """
+
+    num_rows = 1000
+
+    def run_sourced(self, name, cmds):
+        fname = self.csv_file(name)
+        with open(fname, 'w', encoding='utf-8') as f:
+            f.write(cmds)
+        return self.run_cqlsh("SOURCE '%s';" % (fname,))
+
+    def test_source_copy_round_trip(self):
+        table = self.create_table('testcopyto', 'a int, b text, c float, d uuid, PRIMARY KEY (a, b)')
+        insert = self.session.prepare('INSERT INTO %s (a, b, c, d) VALUES (?, ?, ?, ?)' % (table,))
+        execute_concurrent_with_args(self.session, insert,
+                                     [(i, str(i), float(i) + 0.5, uuid4()) for i in range(self.num_rows)])
+        rows = self.select_all(table)
+
+        fname = self.csv_file('exported.csv')
+        output = self.run_sourced('export.cql', "USE %s;\nCOPY testcopyto TO '%s' WITH HEADER = false;\n"
+                                  % (self.ks, fname))
+        self.assertIn('%d rows exported to 1 files' % (self.num_rows,), output)
+
+        self.session.execute('TRUNCATE %s' % (table,))
+        output = self.run_sourced('import.cql', "USE %s;\nCOPY testcopyto FROM '%s' WITH HEADER = false "
+                                  "AND ERRFILE = '%s';\n" % (self.ks, fname, self.csv_file('import.err')))
+        self.assertIn('%d rows imported from 1 files' % (self.num_rows,), output)
+        self.assertEqual(self.select_all(table), rows)
