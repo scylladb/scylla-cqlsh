@@ -122,3 +122,12 @@ class TestCopyFromValidation(CopyTestCase):
 
     def test_read_invalid_text(self):
         self.validate_on_read('test', expect_invalid=True)
+
+    def test_wrong_number_of_columns(self):
+        table = self.create_table('testcolumns', 'a int PRIMARY KEY, b int')
+        fname = self.write_csv('data.csv', [[1, 2, 3]])
+
+        output = self.copy_from(table, fname)
+        self.assertIn('Failed to import 1 rows', output)
+        self.assertIn('Invalid row length 3 should be 2', output)
+        self.assertEqual(self.select_all(table), [])
