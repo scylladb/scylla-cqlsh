@@ -223,3 +223,7 @@ class TestCqlshShell(BaseTestCase):
         # cqlsh used to fail with "list index out of range" when printing a UDT field
         rows = self.select_rows('SELECT name.lastname FROM users WHERE id = 62c36092-82a1-3a00-93d1-46196ee77204;')
         self.assertEqual(rows, [['Josset']])
+
+    def test_connect_timeout(self):  # CASSANDRA-9601
+        output = self.run_cqlsh('USE system;', args=('--debug', '--connect-timeout=10'))
+        self.assertIn('Using connect timeout: 10 seconds', output)
