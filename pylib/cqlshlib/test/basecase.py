@@ -37,6 +37,21 @@ TEST_PORT = int(os.environ.get('CQL_TEST_PORT', 9042))
 TEST_USER = os.environ.get('CQL_TEST_USER', 'cassandra')
 TEST_PWD = os.environ.get('CQL_TEST_PWD')
 
+utc_tzlocal_dir = join(test_dir, 'utc_tzlocal')
+
+
+def cqlsh_env_in_utc(env=None):
+    """
+    Return a copy of env (os.environ by default) in which cqlsh prints timestamps in UTC.
+    Setting TZ needs pytz, and without it cqlsh prints a warning; with TZ unset, cqlsh takes the
+    local time zone from tzlocal. So unset TZ and put a tzlocal stand-in that answers UTC first
+    on PYTHONPATH.
+    """
+    env = dict(os.environ if env is None else env)
+    env.pop('TZ', None)
+    env['PYTHONPATH'] = os.pathsep.join(p for p in (utc_tzlocal_dir, env.get('PYTHONPATH')) if p)
+    return env
+
 
 class BaseTestCase(unittest.TestCase):
     def assertNicelyFormattedTableHeader(self, line, msg=None):

@@ -25,7 +25,7 @@ from collections import namedtuple
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from .basecase import BaseTestCase
+from .basecase import BaseTestCase, cqlsh_env_in_utc
 from .cassconnect import create_keyspace, get_cassandra_connection, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
 
@@ -86,8 +86,9 @@ class CopyTestCase(BaseTestCase):
         Run cqlsh commands and return the output. The exit status is not checked: cqlsh exits non zero
         whenever it prints an error, so the tests check the output and the data instead.
         """
-        # pass our environment on, so cqlsh runs with the same PATH and interpreter as the tests
-        output, _ = call_cqlsh_for_test(input=cmds + '\n', env=os.environ.copy())
+        # pass our environment on, so cqlsh runs with the same PATH and interpreter as the tests,
+        # with timestamps printed in UTC
+        output, _ = call_cqlsh_for_test(input=cmds + '\n', env=cqlsh_env_in_utc())
         return output
 
     def copy_from(self, table, fname, options=''):
@@ -99,6 +100,10 @@ class CopyTestCase(BaseTestCase):
         if options:
             with_clause += ' AND ' + options
         return self.run_cqlsh("COPY %s FROM '%s' WITH %s;" % (table, fname, with_clause))
+
+    def read_csv(self, fname):
+        with open(fname, newline='', encoding='utf-8') as f:
+            return list(csv.reader(f))
 
     def select_all(self, table):
         return sorted(tuple(row) for row in self.session.execute('SELECT * FROM %s' % (table,)))
@@ -221,6 +226,39 @@ class TestCopyAllDatatypes(CopyTestCase):
             {frozenset({'127.0.0.1'}), frozenset({'127.0.0.1', '127.0.0.2'})},  # w frozen<set<set<inet>>>
         )
 
+    # cls.data as COPY TO writes it, with the default COPY options
+    addresses_csv = [
+        "{name: {firstname: 'name%d', lastname: 'last%d'}, number: %d, street: 'street %d', phones: {%s}}"
+        % (i, i, i, i, phones)
+        for i, phones in ((1, "'1111 2222', '3333 4444'"), (2, "'5555 6666', '7777 8888'"),
+                          (3, "'1111 2222', '3333 4444'"), (4, "'5555 6666', '7777 8888'"))
+    ]
+    data_csv = [
+        'ascii',
+        '1099511627776',
+        '0xbeef',
+        'True',
+        '3.14',
+        '2.444',
+        '1.1',
+        '127.0.0.1',
+        '25',
+        'ヽ(`ー`)/',
+        '2005-07-14 12:30:00.000+0000',
+        '0b8d9b4e-f4a2-11e5-9ce9-5e5517507c66',
+        '4ce4b0b5-9e0a-4a4f-a9c1-e1a3d0a8f6f2',
+        'asdf',
+        '36893488147419103232',
+        '[1, 2, 3]',
+        "{'1', '2', '3'}",
+        "{'2005-07-14 12:30:00.000+0000': '1', '2005-07-14 13:30:00.000+0000': '2'}",
+        "(1, '1', True)",
+        addresses_csv[0],
+        '[[%s, %s], [%s, %s]]' % tuple(addresses_csv),
+        "{{1: 1, 2: 2}: {'1', '2', '3'}}",
+        "{{'127.0.0.1'}, {'127.0.0.1', '127.0.0.2'}}",
+    ]
+
     def setUp(self):
         super().setUp()
         self.session.execute('TRUNCATE %s' % (self.table,))
@@ -242,3 +280,11 @@ class TestCopyAllDatatypes(CopyTestCase):
         output = self.copy_from(self.table, fname)
         self.assertIn('1 rows imported from 1 files', output)
         self.assertEqual(self.select_all(self.table), exported_rows)
+
+    def test_all_datatypes_write(self):
+        self.insert_data()
+
+        fname = self.csv_file('exported.csv')
+        output = self.run_cqlsh("COPY %s TO '%s';" % (self.table, fname))
+        self.assertIn('1 rows exported to 1 files', output)
+        self.assertEqual(self.read_csv(fname), [self.data_csv])
