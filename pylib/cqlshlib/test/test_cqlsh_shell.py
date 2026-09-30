@@ -210,3 +210,16 @@ class TestCqlshShell(BaseTestCase):
         output = self.run_cqlsh('TRACING ON; USE system_traces; SELECT * FROM sessions LIMIT 10;')
         self.assertIn('rows)', output)
         self.assertNotIn('Tracing session: ', output)
+
+    def test_select_element_inside_udt(self):  # CASSANDRA-7891
+        self.session.execute('CREATE TYPE %s.address (street text, city text, zip_code int, phones set<text>)'
+                             % (self.ks,))
+        self.session.execute('CREATE TYPE %s.fullname (firstname text, lastname text)' % (self.ks,))
+        self.session.execute('CREATE TABLE %s.users (id uuid PRIMARY KEY, name frozen<fullname>, '
+                             'addresses map<text, frozen<address>>)' % (self.ks,))
+        self.session.execute("INSERT INTO %s.users (id, name) VALUES (62c36092-82a1-3a00-93d1-46196ee77204, "
+                             "{firstname: 'Marie-Claude', lastname: 'Josset'})" % (self.ks,))
+
+        # cqlsh used to fail with "list index out of range" when printing a UDT field
+        rows = self.select_rows('SELECT name.lastname FROM users WHERE id = 62c36092-82a1-3a00-93d1-46196ee77204;')
+        self.assertEqual(rows, [['Josset']])
