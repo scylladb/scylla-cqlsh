@@ -2001,7 +2001,7 @@ class Shell(cmd.Cmd):
         fname = os.path.expanduser(self.cql_unprotect_value(fname))
         try:
             encoding, bom_size = get_file_encoding_bomsize(fname)
-            f = codecs.open(fname, 'r', encoding)
+            f = open(fname, 'r', encoding=encoding, newline='')
             f.seek(bom_size)
         except IOError as e:
             self.printerr('Could not open %r: %s' % (fname, e))
@@ -2781,7 +2781,7 @@ def main(options, hostname, port):
     else:
         try:
             encoding, bom_size = get_file_encoding_bomsize(options.file)
-            stdin = codecs.open(options.file, 'r', encoding)
+            stdin = open(options.file, 'r', encoding=encoding, newline='')
             stdin.seek(bom_size)
         except IOError as e:
             sys.exit("Can't open %r: %s" % (options.file, e))
