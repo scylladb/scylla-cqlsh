@@ -181,3 +181,15 @@ class TestCopyToWithFailures(CopyTestCase):
         self.assertIn('some records might be missing', output)
         # only the rows of the failing range are missing
         self.assertEqual(len(self.read_csv(exported)), self.num_rows - self.count_rows_in_range(start, end))
+
+    def test_copy_to_with_fewer_failures_than_max_attempts(self):
+        start, end = self.ring_range_with_rows()
+        exported = self.csv_file('exported.csv')
+        # the worker sees the attempt number, starting at 1, and fails while it is below num_failures,
+        # so the range fails on attempts 1 and 2 and is exported on attempt 3 out of 5
+        failures = {'failing_range': {'start': start, 'end': end, 'num_failures': 3}}
+        output = self.run_copy("COPY %s TO '%s' WITH MAXATTEMPTS = 5" % (self.table, exported), failures)
+        self.assertIn('will try again later attempt 2 of 5', output)
+        self.assertNotIn('permanently given up', output)
+        self.assertNotIn('some records might be missing', output)
+        self.assertEqual(len(self.read_csv(exported)), self.num_rows)
