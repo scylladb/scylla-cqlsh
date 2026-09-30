@@ -64,11 +64,15 @@ class TestCopyOptions(BaseTestCase):
         output, _ = call_cqlsh_for_test(input=cmd + ';\n', env=env)
         return output
 
-    def copy_to(self, table, fname, options=''):
-        cmd = "COPY %s.%s TO '%s'" % (self.ks, table, fname)
+    def copy_to(self, table, fname, options='', columns=None):
+        cmd = "COPY %s.%s%s TO '%s'" % (self.ks, table, self.column_list(columns), fname)
         if options:
             cmd += ' WITH ' + options
         return self.run_cqlsh(cmd)
+
+    @staticmethod
+    def column_list(columns):
+        return ' (%s)' % (', '.join(columns),) if columns else ''
 
     def copy_from(self, table, fname, options=''):
         # keep the error file out of the working directory
@@ -200,3 +204,23 @@ class TestCopyOptions(BaseTestCase):
             self.assertIsNotNone(remaining)
             self.assertGreater(remaining, 0)
             self.assertLessEqual(remaining, ttl)
+
+    def test_explicit_column_order_writing(self):
+        self.create_table('testorder_writing', 'a int PRIMARY KEY, b int, c text')
+        rows = [(1, 20, 'ham'), (2, 40, 'eggs'), (3, 60, 'beans'), (4, 80, 'toast')]
+        self.insert_rows('testorder_writing', ('a', 'b', 'c'), rows)
+
+        fname = self.csv_file('exported.csv')
+        self.copy_to('testorder_writing', fname, columns=('a', 'c', 'b'))
+        self.assertEqual(sorted(self.read_csv(fname)), sorted([str(a), c, str(b)] for a, b, c in rows))
+
+    def test_explicit_column_order_reading(self):
+        self.create_table('testorder_reading', 'a int PRIMARY KEY, b text, c int')
+        rows = [(1, 20, 'ham'), (2, 40, 'eggs'), (3, 60, 'beans'), (4, 80, 'toast')]
+        fname = self.csv_file('import.csv')
+        self.write_csv(fname, rows)
+
+        self.run_cqlsh("COPY %s.testorder_reading (a, c, b) FROM '%s' WITH ERRFILE = '%s'"
+                       % (self.ks, fname, self.csv_file('import.err')))
+        self.assertEqual(self.select_rows('SELECT a, b, c FROM %s.testorder_reading'),
+                         sorted((a, b, c) for a, c, b in rows))
