@@ -389,3 +389,6 @@ class TestCopyFromCounters(CopyTestCase):
 
     def test_reading_counter(self):
         self.read_counters()
+
+    def test_reading_counter_without_batching(self):
+        self.read_counters('MAXBATCHSIZE = 1')
