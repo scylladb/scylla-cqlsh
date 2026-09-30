@@ -288,3 +288,14 @@ class TestCopyAllDatatypes(CopyTestCase):
         output = self.run_cqlsh("COPY %s TO '%s';" % (self.table, fname))
         self.assertIn('1 rows exported to 1 files', output)
         self.assertEqual(self.read_csv(fname), [self.data_csv])
+
+    def test_all_datatypes_read(self):
+        # the rows the driver writes for cls.data are the ones COPY FROM must write for its CSV
+        self.insert_data()
+        expected_rows = self.select_all(self.table)
+        self.session.execute('TRUNCATE %s' % (self.table,))
+
+        fname = self.write_csv('data.csv', [self.data_csv])
+        output = self.copy_from(self.table, fname)
+        self.assertIn('1 rows imported from 1 files', output)
+        self.assertEqual(self.select_all(self.table), expected_rows)
