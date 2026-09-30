@@ -250,3 +250,16 @@ class TestCopyFromWithFailures(CopyTestCase):
         self.assertEqual(self.read_csv(written_to.group(1)), [self.failing_row])
         self.assertEqual(self.count_rows(), self.num_rows - 1)
         self.assertFalse(self.row_exists(self.failing_row))
+
+    def test_copy_from_with_fewer_failures_than_max_attempts(self):
+        # batches start at attempt 1 and fail while the attempt is below failures,
+        # so the batch fails on attempts 1 and 2 and is imported on attempt 3 out of 5
+        failures = {'failing_batch': {'id': self.failing_batch_id, 'failures': 3}}
+        output = self.copy_from(failures, ' AND MAXATTEMPTS = 5')
+        self.assertIn('Failed to import 1 rows', output)
+        self.assertIn('will retry later, attempt 2 of 5', output)
+        self.assertNotIn('attempt 3 of 5', output)
+        self.assertNotIn('given up', output)
+        self.assertNotIn('Failed to process', output)
+        self.assertEqual(self.count_rows(), self.num_rows)
+        self.assertTrue(self.row_exists(self.failing_row))
