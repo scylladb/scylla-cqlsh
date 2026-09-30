@@ -18,13 +18,25 @@
 # and $CQL_TEST_PORT to the associated port.
 
 import csv
+import datetime
 import os
 import tempfile
-from uuid import uuid4
+from collections import namedtuple
+from decimal import Decimal
+from uuid import UUID, uuid4
 
 from .basecase import BaseTestCase
 from .cassconnect import create_keyspace, get_cassandra_connection, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
+
+
+class HashableDict(dict):
+    """
+    A dict that can be the key of another dict, to insert a map whose keys are maps.
+    """
+
+    def __hash__(self):
+        return hash(frozenset(self.items()))
 
 
 class CopyTestCase(BaseTestCase):
@@ -131,3 +143,102 @@ class TestCopyFromValidation(CopyTestCase):
         self.assertIn('Failed to import 1 rows', output)
         self.assertIn('Invalid row length 3 should be 2', output)
         self.assertEqual(self.select_all(table), [])
+
+
+class TestCopyAllDatatypes(CopyTestCase):
+    """
+    COPY on a table with a column of every CQL type, including nested collections and UDTs (CASSANDRA-9302).
+    """
+
+    columns = 'abcdefghijklmnopqrstuvw'
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.session.execute('CREATE TYPE %s.name_type (firstname text, lastname text)' % (cls.ks,))
+        cls.session.execute('CREATE TYPE %s.address_type (name frozen<name_type>, number int, street text, '
+                            'phones set<text>)' % (cls.ks,))
+        cls.session.execute("""
+            CREATE TABLE %s.testdatatype (
+                a ascii PRIMARY KEY,
+                b bigint,
+                c blob,
+                d boolean,
+                e decimal,
+                f double,
+                g float,
+                h inet,
+                i int,
+                j text,
+                k timestamp,
+                l timeuuid,
+                m uuid,
+                n varchar,
+                o varint,
+                p list<int>,
+                q set<text>,
+                r map<timestamp, text>,
+                s tuple<int, text, boolean>,
+                t frozen<address_type>,
+                u frozen<list<list<address_type>>>,
+                v frozen<map<map<int,int>,set<text>>>,
+                w frozen<set<set<inet>>>
+            )""" % (cls.ks,))
+        cls.table = '%s.testdatatype' % (cls.ks,)
+
+        date1 = datetime.datetime(2005, 7, 14, 12, 30)
+        date2 = datetime.datetime(2005, 7, 14, 13, 30)
+        # the driver serializes a UDT from any object with its field names as attributes
+        Name = namedtuple('Name', ('firstname', 'lastname'))
+        Address = namedtuple('Address', ('name', 'number', 'street', 'phones'))
+        addr1 = Address(Name('name1', 'last1'), 1, 'street 1', {'1111 2222', '3333 4444'})
+        addr2 = Address(Name('name2', 'last2'), 2, 'street 2', {'5555 6666', '7777 8888'})
+        addr3 = Address(Name('name3', 'last3'), 3, 'street 3', {'1111 2222', '3333 4444'})
+        addr4 = Address(Name('name4', 'last4'), 4, 'street 4', {'5555 6666', '7777 8888'})
+        cls.data = (
+            'ascii',  # a ascii
+            2 ** 40,  # b bigint
+            bytes.fromhex('beef'),  # c blob
+            True,  # d boolean
+            Decimal('3.14'),  # e decimal
+            2.444,  # f double
+            1.1,  # g float
+            '127.0.0.1',  # h inet
+            25,  # i int
+            'ヽ(`ー`)/',  # j text
+            date1,  # k timestamp
+            UUID('0b8d9b4e-f4a2-11e5-9ce9-5e5517507c66'),  # l timeuuid
+            UUID('4ce4b0b5-9e0a-4a4f-a9c1-e1a3d0a8f6f2'),  # m uuid
+            'asdf',  # n varchar
+            2 ** 65,  # o varint
+            [1, 2, 3],  # p list<int>
+            {'3', '2', '1'},  # q set<text>
+            {date1: '1', date2: '2'},  # r map<timestamp, text>
+            (1, '1', True),  # s tuple<int, text, boolean>
+            addr1,  # t frozen<address_type>
+            [[addr1, addr2], [addr3, addr4]],  # u frozen<list<list<address_type>>>
+            {HashableDict({1: 1, 2: 2}): {'1', '2', '3'}},  # v frozen<map<map<int,int>,set<text>>>
+            {frozenset({'127.0.0.1'}), frozenset({'127.0.0.1', '127.0.0.2'})},  # w frozen<set<set<inet>>>
+        )
+
+    def setUp(self):
+        super().setUp()
+        self.session.execute('TRUNCATE %s' % (self.table,))
+
+    def insert_data(self):
+        insert = self.session.prepare('INSERT INTO %s (%s) VALUES (%s)'
+                                      % (self.table, ', '.join(self.columns), ', '.join('?' * len(self.columns))))
+        self.session.execute(insert, self.data)
+
+    def test_all_datatypes_round_trip(self):
+        self.insert_data()
+        exported_rows = self.select_all(self.table)
+
+        fname = self.csv_file('exported.csv')
+        output = self.run_cqlsh("COPY %s TO '%s';" % (self.table, fname))
+        self.assertIn('1 rows exported to 1 files', output)
+
+        self.session.execute('TRUNCATE %s' % (self.table,))
+        output = self.copy_from(self.table, fname)
+        self.assertIn('1 rows imported from 1 files', output)
+        self.assertEqual(self.select_all(self.table), exported_rows)
