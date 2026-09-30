@@ -35,6 +35,10 @@ class TestCopyOptions(BaseTestCase):
     Each test creates its own table in a keyspace shared by the class.
     """
 
+    # column names that must be quoted in CQL, one of them a reserved keyword
+    quoted_columns = ('"IdNumber"', '"select"')
+    quoted_rows = [(1, 'no'), (2, 'Yes'), (3, 'True'), (4, 'false')]
+
     @classmethod
     def setUpClass(cls):
         cls.cluster = get_cassandra_connection()
@@ -224,3 +228,18 @@ class TestCopyOptions(BaseTestCase):
         self.copy_from('testorder_reading', fname, columns=('a', 'c', 'b'))
         self.assertEqual(self.select_rows('SELECT a, b, c FROM %s.testorder_reading'),
                          sorted((a, b, c) for a, c, b in rows))
+
+    def check_quoted_column_names_reading(self, table, specify_column_names):
+        """
+        Import a CSV file into a table whose column names need quoting, with or without naming them.
+        """
+        self.create_table(table, '"IdNumber" int PRIMARY KEY, "select" text')
+        fname = self.csv_file('import.csv')
+        self.write_csv(fname, self.quoted_rows)
+
+        output = self.copy_from(table, fname, columns=self.quoted_columns if specify_column_names else None)
+        self.assertIn('4 rows imported', output)
+        self.assertEqual(self.select_rows('SELECT "IdNumber", "select" FROM %s.' + table), self.quoted_rows)
+
+    def test_quoted_column_names_reading_specify_names(self):
+        self.check_quoted_column_names_reading('testquoted_reading_names', specify_column_names=True)
