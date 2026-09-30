@@ -27,6 +27,7 @@ from cassandra.util import Date, Time
 from .basecase import BaseTestCase, dedent
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
+from .cassconnect import testrun_cqlsh as run_cqlsh_for_test
 
 
 class TestCqlshShell(BaseTestCase):
@@ -227,3 +228,17 @@ class TestCqlshShell(BaseTestCase):
     def test_connect_timeout(self):  # CASSANDRA-9601
         output = self.run_cqlsh('USE system;', args=('--debug', '--connect-timeout=10'))
         self.assertIn('Using connect timeout: 10 seconds', output)
+
+    def check_clear_screen(self, cmd):
+        # CLEAR runs the clear command, which writes the terminfo sequence of $TERM
+        env = dict(self.env, TERM='xterm')
+        with run_cqlsh_for_test(tty=True, env=env) as c:
+            c.send(cmd + '\n')
+            # the prompt follows the sequence on the same line, so cmd_and_response() would not find it
+            output = c.read_until(r'cqlsh(:\S+)?> ', timeout=10.0)
+        # one of the "erase in display" sequences: ESC[J, ESC[0J, ESC[1J or ESC[2J
+        self.assertRegex(output, '\x1b\\[[012]?J')
+        self.assertNotIn('Error', output)
+
+    def test_clear(self):  # CASSANDRA-10086
+        self.check_clear_screen('CLEAR')
