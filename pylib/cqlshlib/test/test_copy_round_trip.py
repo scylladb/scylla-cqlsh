@@ -258,3 +258,16 @@ class TestCopyFromWithFailures(CopyTestCase):
         self.assertNotIn('Failed to process', output)
         self.assertEqual(self.count_rows(), self.num_rows)
         self.assertTrue(self.row_exists(self.failing_row))
+
+    def test_copy_from_with_child_process_crashing(self):
+        # the worker that gets the batch exits before sending it, so COPY FROM aborts. While the worker
+        # exits, shutting down its driver session fails its batches still in flight, which it retries,
+        # backing off for up to about a minute, so the worker is often still alive when every other
+        # batch is done. COPY FROM then aborts because no records arrive for CHILDTIMEOUT seconds.
+        failures = {'exit_batch': {'id': self.failing_batch_id}}
+        output = self.copy_from(failures, ' AND CHILDTIMEOUT = 5')
+        self.assertRegex(output, r'child process\(es\) died unexpectedly, aborting'
+                                 r'|No records inserted in 5 seconds, aborting')
+        self.assertFalse(self.row_exists(self.failing_row))
+        # batches queued to the dead worker, or not sent yet, may be missing too
+        self.assertLessEqual(self.count_rows(), self.num_rows - 1)
