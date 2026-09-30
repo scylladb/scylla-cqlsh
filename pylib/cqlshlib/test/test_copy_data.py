@@ -329,3 +329,13 @@ class TestCopyToCollections(CopyTestCase):
 
         expected = [[str(a), '[%s]' % (', '.join(str(u) for u in b),)] for a, b in args]
         self.assertEqual(self.export_sorted(table), expected)
+
+    def test_tuple_data(self):
+        table = self.create_table('testtuple', 'a int PRIMARY KEY, b tuple<uuid, uuid, uuid>')
+        rng = random.Random(0)
+        args = [(i, tuple(self.random_uuids(rng, 3))) for i in range(self.num_rows)]
+        insert = self.session.prepare('INSERT INTO %s (a, b) VALUES (?, ?)' % (table,))
+        execute_concurrent_with_args(self.session, insert, args)
+
+        expected = [[str(a), '(%s)' % (', '.join(str(u) for u in b),)] for a, b in args]
+        self.assertEqual(self.export_sorted(table), expected)
