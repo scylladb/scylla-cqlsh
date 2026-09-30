@@ -193,3 +193,20 @@ class TestCqlshShell(BaseTestCase):
 
             Tracing session: """), output)
         self.assertRegex(output, r'activity\s+\| timestamp\s+\| source\s+\| source_elapsed\s+\| client')
+
+    def test_tracing_from_system_traces(self):
+        self.session.execute('CREATE TABLE %s.traced (key int PRIMARY KEY, c1 text, c2 text)' % (self.ks,))
+        insert = self.session.prepare('INSERT INTO %s.traced (key, c1, c2) VALUES (?, ?, ?)' % (self.ks,))
+        execute_concurrent_with_args(self.session, insert, [(i, 'value1', 'value2') for i in range(10)])
+
+        output = self.run_cqlsh('TRACING ON; SELECT * FROM traced;')
+        self.assertIn('Tracing session: ', output)
+
+        # queries on the trace tables are not traced, whether the keyspace is named or current
+        output = self.run_cqlsh('TRACING ON; SELECT * FROM system_traces.events LIMIT 10;')
+        self.assertIn('Now Tracing is enabled', output)
+        self.assertIn('rows)', output)
+        self.assertNotIn('Tracing session: ', output)
+        output = self.run_cqlsh('TRACING ON; USE system_traces; SELECT * FROM sessions LIMIT 10;')
+        self.assertIn('rows)', output)
+        self.assertNotIn('Tracing session: ', output)
