@@ -119,3 +119,6 @@ class TestCopyFromValidation(CopyTestCase):
 
     def test_read_invalid_uuid(self):
         self.validate_on_read(uuid4(), expect_invalid=True)
+
+    def test_read_invalid_text(self):
+        self.validate_on_read('test', expect_invalid=True)
