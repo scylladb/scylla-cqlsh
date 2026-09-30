@@ -98,3 +98,6 @@ class TestCopyOptions(BaseTestCase):
 
     def test_colon_delimiter(self):
         self.check_delimiter('testdelimiter_colon', ':')
+
+    def test_letter_delimiter(self):
+        self.check_delimiter('testdelimiter_letter', 'a')
