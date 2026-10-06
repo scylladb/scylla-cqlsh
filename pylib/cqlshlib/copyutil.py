@@ -2145,6 +2145,17 @@ class ImportConversion(object):
         def convert_set(val, ct=cql_type):
             return frozenset(convert_mandatory(ct.subtypes[0], v) for v in split(val))
 
+        def convert_vector(val, ct=cql_type):
+            """
+            COPY TO writes vectors as lists. The driver's vector type keeps its element type
+            in ct.subtype rather than ct.subtypes, and only checks the dimension when the whole
+            batch is bound, so check it here to reject only this row.
+            """
+            vals = split(val)
+            if len(vals) != ct.vector_size:
+                raise ParseError('Invalid vector with %d elements, expected %d elements' % (len(vals), ct.vector_size))
+            return tuple(convert_mandatory(ct.subtype, v) for v in vals)
+
         def convert_map(val, ct=cql_type):
             """
             See ImmutableDict above for a discussion of why a special object is needed here.
@@ -2210,6 +2221,9 @@ class ImportConversion(object):
             'map': convert_map,
             'tuple': convert_tuple,
             'frozen': convert_single_subtype,
+            # the driver names the vector type after its Cassandra class, not 'vector' like the other types,
+            # so register both names in case it switches
+            **dict.fromkeys(CqlType.vector_type_names, convert_vector),
         }
 
         return converters.get(cql_type.typename, convert_unknown)

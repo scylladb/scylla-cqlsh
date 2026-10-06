@@ -341,6 +341,39 @@ class TestCopyToCollections(CopyTestCase):
         self.assertEqual(self.export_sorted(table), expected)
 
 
+class TestCopyVectors(CopyTestCase):
+    """
+    COPY FROM must import the vectors COPY TO exports (VECTOR-1004).
+    """
+
+    def test_float_vector_round_trip(self):
+        table = self.create_table('testvector', 'k int PRIMARY KEY, v vector<float, 3>')
+        # the rows from VECTOR-1004, and more rows with floats that COPY TO prints exactly
+        args = [(1, [0.1, 0.2, 0.3]), (2, [1.5, -2.0, 3.25])] + [(k, [k / 4, -k, k * 2]) for k in range(3, 100)]
+        insert = self.session.prepare('INSERT INTO %s (k, v) VALUES (?, ?)' % (table,))
+        execute_concurrent_with_args(self.session, insert, args)
+        exported_rows = self.select_all(table)
+
+        fname = self.csv_file('exported.csv')
+        output = self.run_cqlsh("COPY %s TO '%s';" % (table, fname))
+        self.assertIn('99 rows exported to 1 files', output)
+
+        self.session.execute('TRUNCATE %s' % (table,))
+        output = self.copy_from(table, fname)
+        self.assertIn('99 rows imported from 1 files', output)
+        self.assertEqual(self.select_all(table), exported_rows)
+
+    def test_vector_of_wrong_dimension(self):
+        table = self.create_table('testvector', 'k int PRIMARY KEY, v vector<float, 3>')
+        fname = self.write_csv('data.csv', [[1, '[1.5, -2, 3.25]'], [2, '[1.5, -2]']])
+
+        output = self.copy_from(table, fname)
+        self.assertIn('Failed to import 1 rows', output)
+        self.assertIn('Invalid vector with 2 elements, expected 3 elements', output)
+        self.assertIn('1 rows imported from 1 files', output)
+        self.assertEqual(self.select_all(table), [(1, [1.5, -2.0, 3.25])])
+
+
 class TestCopySource(CopyTestCase):
     """
     COPY must work when it runs from a file read with SOURCE (CASSANDRA-9083).
