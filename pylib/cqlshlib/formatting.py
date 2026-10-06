@@ -124,6 +124,9 @@ class CqlType:
     and a list of its sub-types, if any.
     """
     pattern = re.compile('^([^<]*)<(.*)>$')  # *<*>
+    # schema metadata names vectors 'vector', while the driver's cql_typename(),
+    # used for SELECT results, names them after the Cassandra class
+    vector_type_names = ('vector', 'org.apache.cassandra.db.marshal.VectorType')
 
     def __init__(self, typestring, ksmeta=None):
         self.type_name, self.sub_types, self.formatter = self.parse(typestring, ksmeta)
@@ -169,7 +172,7 @@ class CqlType:
 
                 name = m.group(1)  # a composite type, parse sub types
                 sub_types = self.parse_sub_types(m.group(2), ksmeta)
-                if name == 'vector':
+                if name in self.vector_type_names:
                     # vector<type, dimension> - keep only the element type, discard dimension
                     sub_types = sub_types[:1]
                 return name, sub_types, self._get_formatter(name)

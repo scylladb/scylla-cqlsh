@@ -19,6 +19,7 @@ Tests for vector type formatting in cqlsh.
 """
 
 import unittest
+from cassandra.cqltypes import cql_typename, lookup_casstype
 from cqlshlib.formatting import CqlType, format_by_type
 from cqlshlib.displaying import NO_COLOR_MAP, get_str
 
@@ -99,6 +100,50 @@ class TestVectorValueFormatting(unittest.TestCase):
                                 colormap=NO_COLOR_MAP, addcolor=False)
         result_str = get_str(result)
         self.assertEqual(result_str, '[0.5]')
+
+
+class TestSelectVectorFormatting(unittest.TestCase):
+    """
+    SELECT builds the CqlType of each result column from the driver's cql_typename(), which names
+    a vector org.apache.cassandra.db.marshal.VectorType<float, 3> instead of vector<float, 3>.
+    """
+
+    @staticmethod
+    def select_cql_type(casstype):
+        """Return the CqlType that SELECT builds for a result column of the given driver type."""
+        return CqlType(cql_typename(lookup_casstype(casstype)))
+
+    @staticmethod
+    def format(val, cqltype):
+        return get_str(format_by_type(val, cqltype=cqltype, encoding='utf-8',
+                                      colormap=NO_COLOR_MAP, addcolor=False))
+
+    def test_vector_has_single_subtype(self):
+        """The dimension must not become a second sub-type, whatever the dimension."""
+        for dimension in (1, 2, 3, 5):
+            with self.subTest(dimension=dimension):
+                cqltype = self.select_cql_type('VectorType(FloatType, %d)' % dimension)
+                self.assertEqual(len(cqltype.sub_types), 1)
+                self.assertEqual(cqltype.sub_types[0].type_name, 'float')
+
+    def test_format_float_vector(self):
+        """
+        Reproducer for VECTOR-1005: SELECT failed to format a vector<float, 3> value with
+        'Unexpected number of subtypes 3 - [float, 3]'.
+        """
+        cqltype = self.select_cql_type('VectorType(FloatType, 3)')
+        val = [0.10000000149011612, 0.20000000298023224, 0.30000001192092896]
+        self.assertEqual(self.format(val, cqltype), '[0.1, 0.2, 0.3]')
+
+    def test_format_vector_in_list(self):
+        """list<frozen<vector<int, 3>>> should format each vector."""
+        cqltype = self.select_cql_type('ListType(FrozenType(VectorType(Int32Type, 3)))')
+        self.assertEqual(self.format([[1, 2, 3], [4, 5, 6]], cqltype), '[[1, 2, 3], [4, 5, 6]]')
+
+    def test_format_vector_of_lists(self):
+        """vector<list<int>, 3> should format each element as a list."""
+        cqltype = self.select_cql_type('VectorType(ListType(Int32Type), 3)')
+        self.assertEqual(self.format([[1], [2, 3], []], cqltype), '[[1], [2, 3], []]')
 
 
 if __name__ == '__main__':

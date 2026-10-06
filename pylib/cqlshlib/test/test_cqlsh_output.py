@@ -1028,6 +1028,24 @@ class TestCqlshOutput(BaseTestCase):
             """),
         ))
 
+    def test_vector_output(self):
+        """
+        SELECT must format vectors of every dimension, not only 2, without
+        'Failed to format value' errors (VECTOR-1005).
+        """
+        query = dedent("""
+            CREATE TABLE vectors (k int PRIMARY KEY, v1 vector<float, 1>, v3 vector<float, 3>,
+                                  lv list<frozen<vector<int, 3>>>);
+            INSERT INTO vectors (k, v1, v3, lv) VALUES (1, [0.5], [0.1, 0.2, 0.3], [[1, 2, 3], [4, 5, 6]]);
+            SELECT v1, v3, lv FROM vectors;
+            DROP TABLE vectors;
+        """)
+        output, result = testcall_cqlsh(prompt=None, env=self.default_env,
+                                        tty=False, input=query)
+        self.assertEqual(0, result)
+        self.assertNotIn('Failed to format', output)
+        self.assertIn(' [0.5] | [0.1, 0.2, 0.3] | [[1, 2, 3], [4, 5, 6]]', output)
+
     def test_expanded_output_counts_past_page(self):
         query = "PAGING 5; EXPAND ON; SELECT * FROM twenty_rows_table;"
         output, result = testcall_cqlsh(prompt=None, env=self.default_env,
