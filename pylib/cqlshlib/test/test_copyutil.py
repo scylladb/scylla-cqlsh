@@ -24,11 +24,13 @@ import unittest
 from unittest.mock import Mock, patch
 
 from cassandra import ConsistencyLevel, OperationTimedOut, WriteTimeout, WriteType
+from cassandra.cqltypes import Int32Type, lookup_casstype
 from cassandra.metadata import MIN_LONG, Murmur3Token
 from cassandra.policies import RetryPolicy, WhiteListRoundRobinPolicy
 
 from cqlshlib.copyutil import (CopyTask, ExpBackoffRetryPolicy, ExportProcess, ExportTask, FastTokenAwarePolicy,
-                               ImportProcess, ImportProcessResult, ImportTask, ImportTaskError)
+                               ImportConversion, ImportProcess, ImportProcessResult, ImportTask, ImportTaskError,
+                               ParseError)
 
 
 Default = object()
@@ -718,6 +720,73 @@ class TestImportRetries(CopyTaskTest):
 
         self.assertEqual(len(import_process.session.executed), 1)
         import_process.outmsg.send.assert_not_called()
+
+
+class TestImportConversion(unittest.TestCase):
+    """
+    COPY FROM converts each CSV value into the value bound to the prepared INSERT, with the converter
+    for the column type.
+    """
+
+    protocol_version = 4
+
+    @staticmethod
+    def vector_type(subtype, dimension):
+        return lookup_casstype('org.apache.cassandra.db.marshal.VectorType(org.apache.cassandra.db.marshal.%s, %d)'
+                               % (subtype, dimension))
+
+    def make_conversion(self, value_type):
+        """
+        Return the conversion for a table (k int PRIMARY KEY, v <value_type>), with the default COPY FROM options.
+        """
+        columns = ['k', 'v']
+        parent = Mock(ks='testks', table='testtable', valid_columns=columns, nullval='', decimal_sep='.',
+                      thousands_sep='', boolean_styles=['True', 'False'], debug=False, encoding='utf-8')
+        parent.is_counter.return_value = False
+
+        key = Mock()
+        key.name = 'k'
+        table_meta = Mock(columns={c: Mock() for c in columns}, primary_key=[key], partition_key=[key])
+        statement = Mock(protocol_version=self.protocol_version,
+                         column_metadata=[Mock(type=Int32Type), Mock(type=value_type)])
+        return ImportConversion(parent, table_meta, statement)
+
+    def test_float_vector(self):
+        vector_type = self.vector_type('FloatType', 3)
+        conversion = self.make_conversion(vector_type)
+
+        # the CSV value as COPY TO writes it
+        row = conversion.convert_row(['1', '[1.5, -2, 3.25]'])
+
+        self.assertEqual(row, [1, (1.5, -2.0, 3.25)])
+        serialized = vector_type.serialize(row[1], self.protocol_version)
+        self.assertEqual(vector_type.deserialize(serialized, self.protocol_version), [1.5, -2.0, 3.25])
+
+    def test_text_vector(self):
+        vector_type = self.vector_type('UTF8Type', 2)
+        conversion = self.make_conversion(vector_type)
+
+        row = conversion.convert_row(['1', "['a, b', 'it''s']"])
+
+        self.assertEqual(row, [1, ('a, b', "it's")])
+
+    def test_vector_named_vector(self):
+        # the driver names vectors after the Cassandra class, but it may switch to 'vector' like the other types
+        vector_type = self.vector_type('FloatType', 3)
+        with patch.object(vector_type, 'typename', 'vector'):
+            conversion = self.make_conversion(vector_type)
+
+        row = conversion.convert_row(['1', '[1.5, -2, 3.25]'])
+
+        self.assertEqual(row, [1, (1.5, -2.0, 3.25)])
+
+    def test_vector_of_wrong_dimension(self):
+        conversion = self.make_conversion(self.vector_type('FloatType', 3))
+
+        for value in ('[1.5, -2]', '[1.5, -2, 3.25, 4]', '[]'):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ParseError, 'expected 3 elements'):
+                    conversion.convert_row(['1', value])
 
 
 class TestExpBackoffRetryPolicy(unittest.TestCase):
