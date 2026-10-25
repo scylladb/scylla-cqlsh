@@ -67,6 +67,7 @@ class CustomAuthProviderTest(unittest.TestCase):
         err_msg = self._captured_std_err.getvalue()
         assert err_msg == ''
 
+    @pytest.mark.skipif(not hasattr(os, 'getuid'), reason="no POSIX file permissions to be insecure")
     def test_insecure_creds(self):
         load_auth_provider(construct_config_path('full_plain_text_example'))
         err_msg = self._captured_std_err.getvalue()
