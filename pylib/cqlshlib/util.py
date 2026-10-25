@@ -133,6 +133,9 @@ def is_file_secure(filename):
             raise
         # the file doesn't exist, the security of it is irrelevant
         return True
+    if not hasattr(os, 'getuid'):
+        # Windows has no POSIX owner and mode bits to check
+        return True
     uid = os.getuid()
 
     # Skip enforcing the file owner and UID matching for the root user (uid == 0).

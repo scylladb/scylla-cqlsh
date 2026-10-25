@@ -640,7 +640,7 @@ class ExportWriter(object):
             return CsvDest(output=sys.stdout, close=False)
         else:
             try:
-                ret = CsvDest(output=open(source_name, 'w'), close=True)
+                ret = CsvDest(output=open(source_name, 'w', newline=''), close=True)
                 self.num_files += 1
                 return ret
             except IOError as e:
@@ -1143,7 +1143,7 @@ class ImportErrorHandler(object):
     def add_failed_rows(self, rows):
         self.num_rows_failed += len(rows)
         try:
-            with open(self.err_filename, "a", buffering=1) as f:
+            with open(self.err_filename, "a", buffering=1, newline='') as f:
                 writer = csv.writer(f, **self.options.dialect)
                 for row in rows:
                     writer.writerow(row)
