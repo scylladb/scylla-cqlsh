@@ -1364,9 +1364,13 @@ class Shell(cmd.Cmd):
             return
         return cqlruleset.dequote_name(namestr)
 
-    def cql_unprotect_value(self, valstr):
+    def cql_unprotect_value(self, valstr, decode_escapes=True):
         if valstr is not None:
-            return cqlruleset.dequote_value(valstr)
+            return cqlruleset.dequote_value(valstr, decode_escapes)
+
+    def cql_unprotect_filename(self, valstr):
+        # file names are literal: decoding escapes would turn C:\temp\new.csv into a tab and a newline
+        return self.cql_unprotect_value(valstr, decode_escapes=False)
 
     def print_recreate_keyspace(self, ksdef, out):
         out.write(ksdef.export_as_string())
@@ -1920,7 +1924,7 @@ class Shell(cmd.Cmd):
 
         fname = parsed.get_binding('fname', None)
         if fname is not None:
-            fname = self.cql_unprotect_value(fname)
+            fname = self.cql_unprotect_filename(fname)
 
         copyoptnames = list(map(str.lower, parsed.get_binding('optnames', ())))
         copyoptvals = list(map(self.cql_unprotect_value, parsed.get_binding('optvals', ())))
@@ -2000,7 +2004,7 @@ class Shell(cmd.Cmd):
         See also the --file option to cqlsh.
         """
         fname = parsed.get_binding('fname')
-        fname = os.path.expanduser(self.cql_unprotect_value(fname))
+        fname = os.path.expanduser(self.cql_unprotect_filename(fname))
         try:
             encoding, bom_size = get_file_encoding_bomsize(fname)
             f = open(fname, 'r', encoding=encoding, newline='')
@@ -2087,7 +2091,7 @@ class Shell(cmd.Cmd):
                           ' to disable.' % (self.query_out.name,))
             return
 
-        fname = os.path.expanduser(self.cql_unprotect_value(fname))
+        fname = os.path.expanduser(self.cql_unprotect_filename(fname))
         try:
             f = open(fname, 'a')
         except IOError as e:
