@@ -640,7 +640,7 @@ class ExportWriter(object):
             return CsvDest(output=sys.stdout, close=False)
         else:
             try:
-                ret = CsvDest(output=open(source_name, 'w', newline=''), close=True)
+                ret = CsvDest(output=open(source_name, 'w', newline='', encoding=self.options.copy['encoding']), close=True)
                 self.num_files += 1
                 return ret
             except IOError as e:
@@ -931,6 +931,7 @@ class FilesReader(object):
     """
     def __init__(self, fname, options):
         self.chunk_size = options.copy['chunksize']
+        self.encoding = options.copy['encoding']
         self.header = options.copy['header']
         self.max_rows = options.copy['maxrows']
         self.skip_rows = options.copy['skiprows']
@@ -940,8 +941,7 @@ class FilesReader(object):
         self.current_source = None
         self.num_read = 0
 
-    @staticmethod
-    def get_source(paths):
+    def get_source(self, paths):
         """
          Return a source generator. Each source is a named tuple
          wrapping the source input, file name and a boolean indicating
@@ -949,7 +949,7 @@ class FilesReader(object):
         """
         def make_source(fname):
             try:
-                return open(fname, 'r')
+                return open(fname, 'r', encoding=self.encoding)
             except IOError as e:
                 raise IOError("Can't open %r for reading: %s" % (fname, e))
 
@@ -1143,7 +1143,7 @@ class ImportErrorHandler(object):
     def add_failed_rows(self, rows):
         self.num_rows_failed += len(rows)
         try:
-            with open(self.err_filename, "a", buffering=1, newline='') as f:
+            with open(self.err_filename, "a", buffering=1, newline='', encoding=self.options.copy['encoding']) as f:
                 writer = csv.writer(f, **self.options.dialect)
                 for row in rows:
                     writer.writerow(row)
