@@ -25,6 +25,11 @@ from cqlshlib.cql3handling import decode_escape_sequences, dequote_value
 
 class TestEscapeSequenceDecoding(unittest.TestCase):
 
+    def test_file_names_keep_backslashes(self):
+        """COPY/SOURCE/CAPTURE file names are literal, so Windows paths survive."""
+        self.assertEqual(dequote_value(r"'C:\temp\new.csv'", decode_escapes=False), r'C:\temp\new.csv')
+        self.assertEqual(dequote_value(r"'C:\temp\new.csv'"), 'C:\temp\new.csv')
+
     def test_hex_escape_sequences(self):
         """Test that hex escape sequences are properly decoded."""
         # Test single byte hex values
