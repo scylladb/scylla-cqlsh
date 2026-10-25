@@ -1925,7 +1925,9 @@ class Shell(cmd.Cmd):
             fname = self.cql_unprotect_filename(fname)
 
         copyoptnames = list(map(str.lower, parsed.get_binding('optnames', ())))
-        copyoptvals = list(map(self.cql_unprotect_value, parsed.get_binding('optvals', ())))
+        copyoptvals = [self.cql_unprotect_filename(v) if n in ('configfile', 'errfile', 'ratefile')
+                       else self.cql_unprotect_value(v)
+                       for n, v in zip(copyoptnames, parsed.get_binding('optvals', ()))]
         opts = dict(list(zip(copyoptnames, copyoptvals)))
 
         direction = parsed.get_binding('dir').upper()
