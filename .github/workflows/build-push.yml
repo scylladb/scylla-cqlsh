@@ -14,9 +14,6 @@ permissions:
   contents: read
 
 env:
-  CIBW_SKIP: cp36* cp37* cp38* cp39* pp*
-  # build cp315 wheels while 3.15 is still a release candidate; no-op once it's final
-  CIBW_ENABLE: cpython-prerelease
   # Test modules that need a live cluster; the unit test job runs everything else.
   PYTEST_IGNORE_CLUSTER_TESTS: >-
     --ignore=./cqlshlib/test/test_copy_data.py
@@ -65,40 +62,23 @@ jobs:
           uv pip install --system -r ./pylib/requirements.txt setuptools_scm
           pytest ./cqlshlib/test ${{ env.PYTEST_IGNORE_CLUSTER_TESTS }}
 
-  build_wheels:
-    name: Build wheels (${{ matrix.os }})
-    if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-14, macos-15-intel]
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@f9b966cfadf4109556cadc5bb39ddb72d0ce664e # v4.3.5
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: artifacts-wheels-${{ matrix.os }}
-          path: ./wheelhouse/*.whl
-
-  build_sdist:
-    name: Build source distribution
+  build_dist:
+    name: Build wheel and sdist
     if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Build sdist
-        run: |
-          pipx run build --sdist
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      # pure python, one py3-none-any wheel covers every platform
+      - name: Build
+        run: uv build
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: artifacts-source-dist
-          path: dist/*.tar.gz
+          name: artifacts-dist
+          path: dist/*
 
   integration_test_scylla:
     name: Integration Tests (Scylla, Python ${{ matrix.python-version }})
@@ -216,7 +196,7 @@ jobs:
             scylladb/scylla-cqlsh:master
 
   upload_pypi:
-    needs: [unit_tests, build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
+    needs: [unit_tests, build_dist, integration_test_scylla, integration_test_cassandra]
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && endsWith(github.event.ref, 'scylla')

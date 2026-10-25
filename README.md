@@ -61,8 +61,6 @@ pytest
 
 ```bash
 pip install build
-# optionally can disable the usage of cython
-# export CQLSH_NO_CYTHON=true
 python -m build -w
 ...
 Successfully built scylla_cqlsh-6.0.24.dev0+gb09bc79361.d20240910-py3-none-any.whl
