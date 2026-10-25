@@ -234,7 +234,7 @@ def test_source_subshell_preserves_client_routes(cqlsh_module, tmp_path):
     parent_shell.profiles = profiles
     parent_shell.no_compression = True
     parent_shell.coverage = False
-    parent_shell.cql_unprotect_value.return_value = str(source_file)
+    parent_shell.cql_unprotect_filename.return_value = str(source_file)
 
     parsed = MagicMock()
     parsed.get_binding.return_value = str(source_file)

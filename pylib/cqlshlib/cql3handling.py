@@ -195,14 +195,15 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
         return ''.join(result)
 
     @staticmethod
-    def dequote_value(cqlword):
+    def dequote_value(cqlword, decode_escapes=True):
         cqlword = cqlword.strip()
         if cqlword == '':
             return cqlword
         if cqlword[0] == "'" and cqlword[-1] == "'":
             cqlword = cqlword[1:-1].replace("''", "'")
             # Decode escape sequences after removing quotes
-            cqlword = Cql3ParsingRuleSet.decode_escape_sequences(cqlword)
+            if decode_escapes:
+                cqlword = Cql3ParsingRuleSet.decode_escape_sequences(cqlword)
         return cqlword
 
 
