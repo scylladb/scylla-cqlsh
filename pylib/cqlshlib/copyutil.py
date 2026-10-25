@@ -640,7 +640,7 @@ class ExportWriter(object):
             return CsvDest(output=sys.stdout, close=False)
         else:
             try:
-                ret = CsvDest(output=open(source_name, 'w'), close=True)
+                ret = CsvDest(output=open(source_name, 'w', newline=''), close=True)
                 self.num_files += 1
                 return ret
             except IOError as e:
@@ -672,7 +672,8 @@ class ExportWriter(object):
                     self._next_dest()
                     last_switch = i
                     num_remaining += self.max_output_size
-                self.current_dest.output.write(row + '\n')
+                # the file has newline='', so write the separator split() removed, not a bare '\n'
+                self.current_dest.output.write(row + os.linesep)
 
             self.num_written = num - last_switch
         else:
@@ -1143,7 +1144,7 @@ class ImportErrorHandler(object):
     def add_failed_rows(self, rows):
         self.num_rows_failed += len(rows)
         try:
-            with open(self.err_filename, "a", buffering=1) as f:
+            with open(self.err_filename, "a", buffering=1, newline='') as f:
                 writer = csv.writer(f, **self.options.dialect)
                 for row in rows:
                     writer.writerow(row)
