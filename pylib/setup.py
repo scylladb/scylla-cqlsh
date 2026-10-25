@@ -15,23 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import warnings
-from setuptools import setup, Extension
-
-
-def get_extensions():
-    if os.environ.get('CQLSH_NO_CYTHON'):
-        return []
-    try:
-        from Cython.Build import cythonize
-        extensions = [Extension(name='copyutil',
-                                sources=["cqlshlib/copyutil.py"],
-                                define_macros=[("CYTHON_LIMITED_API", "1")])]
-        return cythonize(extensions,
-                         compiler_directives={'language_level': '3str'})
-    except ImportError:
-        warnings.warn("installing cython could speed things up for you; `pip install cython`")
+from setuptools import setup
 
 
 setup(
@@ -42,7 +26,6 @@ setup(
         "scylla-driver >= 3.29.11; sys_platform == 'win32'",
         "lz4",
     ],
-    ext_modules=get_extensions(),
     license="Apache",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
