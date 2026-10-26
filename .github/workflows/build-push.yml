@@ -17,6 +17,8 @@ env:
   CIBW_SKIP: cp36* cp37* cp38* cp39* pp*
   # build cp315 wheels while 3.15 is still a release candidate; no-op once it's final
   CIBW_ENABLE: cpython-prerelease
+  # smoke-test every built wheel, so a wheel that can't even import (e.g. on Windows) fails the build
+  CIBW_TEST_COMMAND: python -c "import cqlshlib.copyutil" && cqlsh --version
   # Test modules that need a live cluster; the unit test job runs everything else.
   PYTEST_IGNORE_CLUSTER_TESTS: >-
     --ignore=./cqlshlib/test/test_copy_data.py
@@ -38,12 +40,22 @@ env:
 
 jobs:
   unit_tests:
-    name: Unit Tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Unit Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15']
+        include:
+          # oldest and newest interpreters we claim to support
+          - {os: windows-latest, python-version: '3.10'}
+          - {os: windows-latest, python-version: '3.15'}
+          - {os: macos-latest, python-version: '3.10'}
+          - {os: macos-latest, python-version: '3.15'}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -164,6 +176,104 @@ jobs:
           pip install -r ./pylib/requirements.txt
            ./reloc/build_reloc.sh
           pytest ./cqlshlib/test
+
+  # GitHub's Windows runners only run Windows containers, so Scylla runs in Docker inside WSL2
+  # and the tests run on the Windows side, reaching it through WSL's localhost forwarding.
+  integration_test_scylla_windows:
+    name: Integration Tests (Scylla in WSL2, Windows)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Install WSL2 Ubuntu
+        shell: pwsh
+        run: |
+          wsl --version
+          wsl --set-default-version 2
+          wsl --install -d Ubuntu-24.04 --no-launch
+          wsl -d Ubuntu-24.04 -u root -- uname -a
+          wsl -l -v
+          # WSL shuts the VM down (and Scylla with it) once no wsl.exe is attached; keep one around
+          Start-Process -WindowStyle Hidden wsl -ArgumentList '-d','Ubuntu-24.04','-u','root','--','sleep','infinity'
+
+      - name: Start Scylla
+        shell: pwsh
+        run: |
+          wsl -d Ubuntu-24.04 -u root -- bash -euxc "curl -fsSL https://get.docker.com | sh; service docker start || true; sysctl -w fs.aio-max-nr=1048576"
+          wsl -d Ubuntu-24.04 -u root -- docker run -d --name scylla -p 9042:9042 -p 19042:19042 scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test --smp 2 --memory 2G --overprovisioned 1 --broadcast-rpc-address 127.0.0.1
+
+      - name: pytest
+        shell: bash
+        env:
+          CQL_TEST_HOST: 127.0.0.1
+          SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
+        run: |
+          export UV_HTTP_TIMEOUT=120
+          uv pip install --system -r ./pylib/requirements.txt setuptools_scm
+          python ./scripts/wait-for-cql.py 127.0.0.1
+          # test_proxy_access needs iptables and a docker proxy container on the test host.
+          # Known Windows failures, deselected so the job still catches new ones:
+          # - piped output uses the console code page even with --encoding=utf-8
+          # - COPY's dead-worker detection doesn't report a crashed child under spawn
+          python -X faulthandler -m pytest -v ./cqlshlib/test --ignore=./cqlshlib/test/test_proxy_access.py \
+            --deselect=cqlshlib/test/test_cqlsh_output.py::TestCqlshOutput::test_no_prompt_or_colors_output \
+            --deselect=cqlshlib/test/test_cqlsh_shell.py::TestCqlshShell::test_source_glass \
+            --deselect=cqlshlib/test/test_copy_round_trip.py::TestCopyToWithFailures::test_copy_to_with_child_process_crashing \
+            --deselect=cqlshlib/test/test_copy_round_trip.py::TestCopyFromWithFailures::test_copy_from_with_child_process_crashing
+
+      - name: Scylla logs
+        if: failure()
+        shell: pwsh
+        run: wsl -d Ubuntu-24.04 -u root -- docker logs scylla
+
+  # Docker on macOS runners needs a VM (colima); Apple silicon runners don't allow nested
+  # virtualization, so this has to be an Intel runner.
+  integration_test_scylla_macos:
+    name: Integration Tests (Scylla in colima, macOS)
+    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    # informational for now: completion tests assume GNU readline, and Scylla in a
+    # nested colima VM is slow enough to time out the odd test
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - uses: douglascamata/setup-docker-macos-action@d5ccc6aae0ce23e7700154f5e63cc53e6433ac48 # v1.1.0
+
+      - name: Start Scylla
+        run: |
+          docker run -d --name scylla -p 9042:9042 -p 19042:19042 scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test --smp 2 --memory 2G --overprovisioned 1 --broadcast-rpc-address 127.0.0.1
+
+      - name: pytest
+        env:
+          CQL_TEST_HOST: 127.0.0.1
+          # reloc/build_reloc.sh is Linux-only, so nothing builds the package here
+          SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
+        run: |
+          export UV_HTTP_TIMEOUT=120
+          uv pip install --system -r ./pylib/requirements.txt setuptools_scm
+          python ./scripts/wait-for-cql.py 127.0.0.1
+          # test_proxy_access needs iptables on the test host
+          pytest ./cqlshlib/test --ignore=./cqlshlib/test/test_proxy_access.py
+
+      - name: Scylla logs
+        if: failure()
+        run: docker logs scylla
 
   docker:
     runs-on: ubuntu-latest
