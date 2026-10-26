@@ -21,10 +21,11 @@
 import locale
 import os
 import re
+import unittest
 
 from .basecase import BaseTestCase
 from .cassconnect import create_db, remove_db, testrun_cqlsh, get_cassandra_connection
-from .run_cqlsh import TimeoutError
+from .run_cqlsh import TimeoutError, pty
 from cqlshlib.cql3handling import CqlRuleSet
 
 BEL = '\x07'  # the terminal-bell character
@@ -44,6 +45,8 @@ class CqlshCompletionCase(BaseTestCase):
 
     @classmethod
     def setUpClass(cls):
+        if pty is None:  # skip before create_db(), or the keyspace is never dropped
+            raise unittest.SkipTest('needs a pty')
         create_db()
         with testrun_cqlsh() as c:
             output = c.cmd_and_response("SELECT * FROM system_schema.scylla_tables LIMIT 1;")
