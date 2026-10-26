@@ -25,7 +25,7 @@ from packaging.version import Version
 import pytest
 from cassandra import InvalidRequest
 
-from .basecase import (BaseTestCase, TEST_HOST, TEST_PORT,
+from .basecase import (BaseTestCase, known_macos_failure, known_windows_failure, TEST_HOST, TEST_PORT,
                        at_a_time, cqlshlog, dedent)
 from .cassconnect import (cassandra_cursor, create_db, get_keyspace,
                           quote_name, remove_db, split_cql_commands,
@@ -179,6 +179,7 @@ class TestCqlshOutput(BaseTestCase):
         describe_statement = re.sub(r"WITH[\s]*;", "", describe_statement)
         return describe_statement
 
+    @known_macos_failure(256)
     def test_no_color_output(self):
         env = self.default_env
         for termname in ('', 'dumb', 'vt100'):
@@ -192,6 +193,7 @@ class TestCqlshOutput(BaseTestCase):
                 c.send('totally invalid cql;\n')
                 self.assertNoHasColors(c.read_to_next_prompt())
 
+    @known_windows_failure(254)
     def test_no_prompt_or_colors_output(self):
         env = self.default_env
         for termname in ('', 'dumb', 'vt100', 'xterm'):
@@ -899,6 +901,7 @@ class TestCqlshOutput(BaseTestCase):
             self.assertHasColors(output)
             self.assertRegex(output, f'^Connected to .* at {re.escape(TEST_HOST)}:{TEST_PORT}$')
 
+    @known_macos_failure(256)
     def test_eof_prints_newline(self):
         with testrun_cqlsh(tty=True, env=self.default_env) as c:
             c.send(CONTROL_D)

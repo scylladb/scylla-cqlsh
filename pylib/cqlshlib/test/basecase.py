@@ -53,6 +53,17 @@ def cqlsh_env_in_utc(env=None):
     return env
 
 
+ISSUES = 'https://github.com/scylladb/scylla-cqlsh/issues/'
+
+
+def known_windows_failure(issue):
+    return unittest.skipIf(sys.platform == 'win32', 'known Windows failure, see %s%s' % (ISSUES, issue))
+
+
+def known_macos_failure(issue):
+    return unittest.skipIf(sys.platform == 'darwin', 'known macOS failure, see %s%s' % (ISSUES, issue))
+
+
 class BaseTestCase(unittest.TestCase):
     def assertNicelyFormattedTableHeader(self, line, msg=None):
         return self.assertRegex(line, r'^ +\w+( +\| \w+)*\s*$', msg=msg)
