@@ -17,6 +17,22 @@
 from cassandra.metadata import RegisteredTableExtension
 import io
 import struct
+import sys
+
+if sys.platform == 'win32':
+    # The driver defaults to its libev reactor when the extension is built, and on Windows
+    # that crashes the interpreter (0xC0000409) on the first connect. Use asyncio instead,
+    # for every Cluster cqlsh, COPY and the tests create.
+    import asyncio
+    import warnings
+    import cassandra.cluster
+    from cassandra.io.asyncioreactor import AsyncioConnection
+    cassandra.cluster.DefaultConnection = cassandra.cluster.Cluster.connection_class = AsyncioConnection
+    # AsyncioConnection._close() calls remove_reader/remove_writer, which the default Proactor
+    # loop doesn't implement, so closed connections would never error out their pending requests.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)  # the policy API is deprecated since 3.14
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 # Add a handler for schema extensions to at least print 
