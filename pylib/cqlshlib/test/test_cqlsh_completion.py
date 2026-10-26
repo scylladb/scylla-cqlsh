@@ -23,7 +23,7 @@ import os
 import re
 import unittest
 
-from .basecase import BaseTestCase
+from .basecase import BaseTestCase, known_macos_failure
 from .cassconnect import create_db, remove_db, testrun_cqlsh, get_cassandra_connection
 from .run_cqlsh import TimeoutError, pty
 from cqlshlib.cql3handling import CqlRuleSet
@@ -209,6 +209,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
     def test_complete_in_select(self):
         pass
 
+    @known_macos_failure(256)
     def test_complete_in_insert(self):
         self.trycompletions('INSERT INTO  ',
                             choices=('twenty_rows_table',
@@ -524,6 +525,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
     def test_complete_in_batch(self):
         pass
 
+    @known_macos_failure(256)
     def test_complete_in_create_keyspace(self):
         self.trycompletions('create keyspace ', '', choices=('<identifier>', '<quotedName>', 'IF'))
         self.trycompletions('create keyspace moo ',
@@ -574,6 +576,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                             "'class': 'NetworkTopologyStrategy'} and ",
                             "durable_writes = '")
 
+    @known_macos_failure(256)
     def test_complete_in_string_literals(self):
         # would be great if we could get a space after this sort of completion,
         # but readline really wants to make things difficult for us
@@ -735,11 +738,13 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                      'enabled', 'unchecked_tombstone_compaction',
                                      'only_purge_repaired_tombstones', 'provide_overlapping_tombstones'])
 
+    @known_macos_failure(256)
     def test_complete_in_create_columnfamily(self):
         self.trycompletions('CREATE C', choices=['COLUMNFAMILY', 'CUSTOM'])
         self.trycompletions('CREATE CO', immediate='LUMNFAMILY ')
         self.create_columnfamily_table_template('COLUMNFAMILY')
 
+    @known_macos_failure(256)
     def test_complete_in_create_table(self):
         self.trycompletions('CREATE T', choices=['TRIGGER', 'TABLE', 'TYPE'])
         self.trycompletions('CREATE TA', immediate='BLE ')
@@ -877,6 +882,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
     # def test_complete_in_drop_index(self):
     #     pass
 
+    @known_macos_failure(256)
     def test_complete_in_alter_keyspace(self):
         self.trycompletions('ALTER KEY', 'SPACE ')
         self.trycompletions('ALTER KEYSPACE ', '', choices=[self.cqlsh.keyspace, 'system_auth',

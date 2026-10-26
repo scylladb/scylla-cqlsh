@@ -219,15 +219,9 @@ jobs:
           export UV_HTTP_TIMEOUT=120
           uv pip install --system -r ./pylib/requirements.txt setuptools_scm
           python ./scripts/wait-for-cql.py 127.0.0.1
-          # test_proxy_access needs iptables and a docker proxy container on the test host.
-          # Known Windows failures, deselected so the job still catches new ones:
-          # - piped output uses the console code page even with --encoding=utf-8
-          # - COPY's dead-worker detection doesn't report a crashed child under spawn
-          python -X faulthandler -m pytest -v ./cqlshlib/test --ignore=./cqlshlib/test/test_proxy_access.py \
-            --deselect=cqlshlib/test/test_cqlsh_output.py::TestCqlshOutput::test_no_prompt_or_colors_output \
-            --deselect=cqlshlib/test/test_cqlsh_shell.py::TestCqlshShell::test_source_glass \
-            --deselect=cqlshlib/test/test_copy_round_trip.py::TestCopyToWithFailures::test_copy_to_with_child_process_crashing \
-            --deselect=cqlshlib/test/test_copy_round_trip.py::TestCopyFromWithFailures::test_copy_from_with_child_process_crashing
+          # test_proxy_access needs iptables and a docker proxy container on the test host;
+          # known Windows failures are skipped in the tests themselves, with their issues
+          python -X faulthandler -m pytest -v ./cqlshlib/test --ignore=./cqlshlib/test/test_proxy_access.py
 
       - name: Scylla logs
         if: failure()
@@ -241,9 +235,6 @@ jobs:
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
     runs-on: macos-15-intel
     timeout-minutes: 60
-    # informational for now: completion tests assume GNU readline, and Scylla in a
-    # nested colima VM is slow enough to time out the odd test
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

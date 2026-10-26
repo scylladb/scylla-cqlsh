@@ -26,7 +26,7 @@ from uuid import UUID
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.util import Date, Time
 
-from .basecase import BaseTestCase, cqlsh_env_in_utc, dedent, test_dir
+from .basecase import BaseTestCase, cqlsh_env_in_utc, dedent, known_windows_failure, test_dir
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .cassconnect import testcall_cqlsh as call_cqlsh_for_test
 from .cassconnect import testrun_cqlsh as run_cqlsh_for_test
@@ -253,6 +253,7 @@ class TestCqlshShell(BaseTestCase):
         self.assertEqual(output.strip(), '')
         self.assertEqual(list(self.session.execute('SELECT id FROM %s.batch_data' % (self.ks,))), [(0,)])
 
+    @known_windows_failure(254)
     def test_source_glass(self):
         # glass.cql fills maps of every value type, keyed by "I can eat glass" in four scripts
         latin = 'Vitrum edere possum, mihi non nocet.'

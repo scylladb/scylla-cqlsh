@@ -28,7 +28,7 @@ import tempfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.metadata import MAX_LONG
 
-from .basecase import BaseTestCase
+from .basecase import BaseTestCase, known_windows_failure
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .run_cqlsh import CqlshRunner
 
@@ -200,6 +200,7 @@ class TestCopyToWithFailures(CopyTestCase):
         self.assertNotIn('some records might be missing', output)
         self.assertEqual(len(self.read_csv(exported)), self.num_rows)
 
+    @known_windows_failure(255)
     def test_copy_to_with_child_process_crashing(self):
         start, end = self.ring_range_with_rows()
         exported = self.csv_file('exported.csv')
@@ -264,6 +265,7 @@ class TestCopyFromWithFailures(CopyTestCase):
         self.assertEqual(self.count_rows(), self.num_rows)
         self.assertTrue(self.row_exists(self.failing_row))
 
+    @known_windows_failure(255)
     def test_copy_from_with_child_process_crashing(self):
         # the worker that gets the batch exits before sending it, so COPY FROM aborts. While the worker
         # exits, shutting down its driver session fails its batches still in flight, which it retries,
