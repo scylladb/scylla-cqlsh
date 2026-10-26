@@ -21,13 +21,17 @@ import sys
 import re
 import contextlib
 import subprocess
+import unittest
 import signal
 from time import time
 from . import basecase
 from os.path import join
 
 
-import pty
+try:
+    import pty
+except ImportError:  # Windows has no pty; tests that need a tty get skipped
+    pty = None
 DEFAULT_PREFIX = os.linesep
 
 DEFAULT_CQLSH_PROMPT = DEFAULT_PREFIX + r'(\S+@)?cqlsh(:\S+)?> '
@@ -47,7 +51,10 @@ def get_smm_sequence(term='xterm'):
     before each prompt.
     """
     result = ''
-    tput_proc = subprocess.Popen(['tput', '-T{}'.format(term), 'smm'], stdout=subprocess.PIPE)
+    try:
+        tput_proc = subprocess.Popen(['tput', '-T{}'.format(term), 'smm'], stdout=subprocess.PIPE)
+    except OSError:  # no tput, e.g. on Windows
+        return result
     tput_stdout = tput_proc.communicate()[0]
     if (tput_stdout and (tput_stdout != b'')):
         result = tput_stdout
@@ -130,6 +137,8 @@ class ProcRunner:
         cqlshlog.info("Spawning %r subprocess with args: %r and env: %r"
                       % (self.exe_path, self.args, self.env))
         if self.tty:
+            if pty is None:
+                raise unittest.SkipTest('needs a pty')
             masterfd, slavefd = pty.openpty()
             preexec = (lambda: set_controlling_pty(masterfd, slavefd))
             self.proc = subprocess.Popen((self.python_exe, self.exe_path,) + tuple(self.args),
@@ -143,7 +152,7 @@ class ProcRunner:
         else:
             stdin = stdout = subprocess.PIPE
             stderr = subprocess.STDOUT
-            self.proc = subprocess.Popen((self.exe_path,) + tuple(self.args),
+            self.proc = subprocess.Popen((self.python_exe, self.exe_path,) + tuple(self.args),
                                          env=self.env, stdin=stdin, stdout=stdout,
                                          stderr=stderr, bufsize=0, close_fds=False)
             self.send = self.send_pipe
@@ -240,6 +249,8 @@ class CqlshRunner(ProcRunner):
         if env is None:
             env = {}
         env.setdefault('TERM', 'xterm')
+        if 'SYSTEMROOT' in os.environ:  # a Windows child process can't start without it
+            env.setdefault('SYSTEMROOT', os.environ['SYSTEMROOT'])
         env.setdefault('CQLSH_NO_BUNDLED', os.environ.get('CQLSH_NO_BUNDLED', ''))
         env.setdefault('PYTHONPATH', os.environ.get('PYTHONPATH', ''))
         coverage = False
@@ -304,4 +315,6 @@ def call_cqlsh(**kwargs):
     result = c.close()
     if isinstance(output, bytes):
         output = output.decode("utf-8")
+    # Windows text-mode stdout writes \r\n; the tests expect \n
+    output = output.replace('\r\n', '\n')
     return output, result
