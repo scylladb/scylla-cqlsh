@@ -38,6 +38,8 @@ setup(
     name="scylla-cqlsh",
     install_requires=[
         "scylla-driver >= 3.25.10",
+        # Windows uses the asyncio reactor, which only supports TLS from 3.29.11
+        "scylla-driver >= 3.29.11; sys_platform == 'win32'",
         "lz4",
     ],
     ext_modules=get_extensions(),
