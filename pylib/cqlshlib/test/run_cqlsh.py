@@ -16,6 +16,7 @@
 
 # NOTE: this testing tool is *nix specific
 
+import codecs
 import os
 import sys
 import re
@@ -128,6 +129,8 @@ class ProcRunner:
             env = {}
         self.env = env
         self.readbuf = ''
+        # a read can end mid-character, so keep the partial bytes for the next read
+        self.decoder = codecs.getincrementaldecoder('utf-8')()
 
         self.start_proc()
 
@@ -176,16 +179,18 @@ class ProcRunner:
         self.proc.stdin.write(data)
 
     def read_tty(self, blksize, timeout=None):
-        buf = os.read(self.childpty, blksize)
-        if isinstance(buf, bytes):
-            buf = buf.decode("utf-8")
-        return buf
+        return self.read_text(lambda: os.read(self.childpty, blksize))
 
     def read_pipe(self, blksize, timeout=None):
-        buf = self.proc.stdout.read(blksize)
-        if isinstance(buf, bytes):
-            buf = buf.decode("utf-8")
-        return buf
+        return self.read_text(lambda: self.proc.stdout.read(blksize))
+
+    def read_text(self, read_bytes):
+        while True:
+            buf = read_bytes()
+            text = self.decoder.decode(buf, final=not buf)
+            # '' means EOF to callers, so don't return it for a read that was only a partial character
+            if text or not buf:
+                return text
 
     def read_until(self, until, blksize=4096, timeout=None,
                    flags=0, ptty_timeout=None, replace=[]):
