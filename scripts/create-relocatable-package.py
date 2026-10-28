@@ -22,6 +22,7 @@
 #
 
 import argparse
+import os
 import subprocess
 import tarfile
 import pathlib
@@ -42,21 +43,17 @@ def reloc_add(self, name, arcname=None):
 tarfile.TarFile.reloc_add = reloc_add
 
 
-def fix_binary(path, libpath):
-    '''Makes one binary or shared library relocatable. To do that, we need to set RUNPATH to $ORIGIN/../lib64 so we get libraries
-    from the relocatable directory and not from the system during runtime. We also want to copy the interpreter used so
-    we can launch with it later.
+def fix_sharedlibs(sitepackages):
+    '''The bundled .so files run on scylla-python3's own glibc, so point them at its lib64, the same
+    way scylla-python3 does for its own site-packages. Otherwise e.g. libpthread.so.0 comes from the system.
     '''
-    # it's a pity patchelf have to patch an actual binary.
-
-    subprocess.check_call(['patchelf',
-                           '--set-rpath',
-                           libpath,
-                           path])
-
-
-def fix_sharedlib(binpath):
-    fix_binary(binpath, '$ORIGIN/lib64')
+    for so in pathlib.Path(sitepackages).rglob('*.so*'):
+        with open(so, 'rb') as f:
+            if f.read(4) != b'\x7fELF':
+                continue
+        installed_dir = pathlib.Path('share/cassandra/lib/site-packages') / so.parent.relative_to(sitepackages)
+        relpath = os.path.relpath('python3/lib64', installed_dir)
+        subprocess.check_call(['patchelf', '--add-rpath', f'$ORIGIN/{relpath}', so])
 
 
 ap = argparse.ArgumentParser(description='Create a relocatable scylla package.')
@@ -84,17 +81,9 @@ ar.reloc_add('build/SCYLLA-PRODUCT-FILE', arcname='SCYLLA-PRODUCT-FILE')
 ar.reloc_add('dist/debian')
 ar.reloc_add('dist/redhat')
 ar.reloc_add('bin/cqlsh.py')
-ar.reloc_add('pylib')
+ar.reloc_add('bin/cqlsh.py', arcname='bin/cqlsh')
+fix_sharedlibs('build/site-packages')
+ar.reloc_add('build/site-packages', arcname='lib/site-packages')
 ar.reloc_add('install.sh')
 ar.reloc_add('build/debian/debian', arcname='debian')
 
-
-# clear scylla-driver out of the package
-# we assume that scylla-python3 already have it (and all it's .so are relocatable,
-# and pointing the correct lib folder)
-cqlsh_bin = pathlib.Path('bin/cqlsh').resolve()
-subprocess.check_call(["mv", cqlsh_bin, f'{cqlsh_bin}.zip'])
-subprocess.run(["zip", "--delete", cqlsh_bin, "site-packages/cassandra/*"])
-subprocess.check_call(["mv", f'{cqlsh_bin}.zip', cqlsh_bin])
-
-ar.reloc_add('bin/cqlsh')
