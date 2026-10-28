@@ -36,6 +36,8 @@ TEST_HOST = os.environ.get('CQL_TEST_HOST', '127.0.0.1')
 TEST_PORT = int(os.environ.get('CQL_TEST_PORT', 9042))
 TEST_USER = os.environ.get('CQL_TEST_USER', 'cassandra')
 TEST_PWD = os.environ.get('CQL_TEST_PWD')
+# multiplies the harness's timeouts, for slow hosts such as Scylla in a VM on macOS CI
+TIMEOUT_SCALE = float(os.environ.get('CQL_TEST_TIMEOUT_SCALE', 1))
 
 utc_tzlocal_dir = join(test_dir, 'utc_tzlocal')
 

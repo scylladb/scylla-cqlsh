@@ -27,7 +27,7 @@ from cassandra.metadata import maybe_escape_name as quote_name
 from cassandra.auth import PlainTextAuthProvider
 from cqlshlib.cql3handling import CqlRuleSet
 
-from .basecase import TEST_HOST, TEST_PORT, TEST_USER, TEST_PWD, cqlshlog, test_dir
+from .basecase import TEST_HOST, TEST_PORT, TEST_USER, TEST_PWD, TIMEOUT_SCALE, cqlshlog, test_dir
 from .run_cqlsh import run_cqlsh, call_cqlsh
 
 test_keyspace_init = os.path.join(test_dir, 'test_keyspace_init.cql')
@@ -167,7 +167,7 @@ def cassandra_cursor(cql_version=None, ks=''):
     try:
         c = conn.connect(ks)
         # increase default timeout to fix flacky tests, see CASSANDRA-12481
-        c.default_timeout = 60.0
+        c.default_timeout = 60.0 * TIMEOUT_SCALE
         yield c
     finally:
         conn.shutdown()

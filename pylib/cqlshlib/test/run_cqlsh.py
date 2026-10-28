@@ -108,7 +108,7 @@ def timing_out(seconds):
         oldval, oldint = signal.getitimer(signal.ITIMER_REAL)
         if oldval != 0.0:
             raise RuntimeError("ITIMER_REAL already in use")
-        signal.setitimer(signal.ITIMER_REAL, seconds)
+        signal.setitimer(signal.ITIMER_REAL, seconds * basecase.TIMEOUT_SCALE)
         try:
             yield
         finally:

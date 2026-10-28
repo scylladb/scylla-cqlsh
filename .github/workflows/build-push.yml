@@ -253,6 +253,8 @@ jobs:
       - name: pytest
         env:
           CQL_TEST_HOST: 127.0.0.1
+          # Scylla shares the runner's 4 cores with the tests through colima, and is slow
+          CQL_TEST_TIMEOUT_SCALE: "3"
           # reloc/build_reloc.sh is Linux-only, so nothing builds the package here
           SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
         run: |
