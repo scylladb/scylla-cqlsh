@@ -25,9 +25,17 @@ jobs:
           CURRENT_TAG="${GITHUB_REF_NAME}"
           echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
           
-          # Get the previous tag by excluding the current tag and taking the most recent
-          PREV_TAG=$(git tag --list '*-scylla' --sort=-creatordate | grep -v "^${CURRENT_TAG}$" | head -n 1 || true)
-          
+          # Nearest earlier tag in this tag's history, so a tag on a branch-* gets
+          # the branch's own changelog
+          PREV_TAG=$(git describe --tags --abbrev=0 --match '*-scylla' "${CURRENT_TAG}^" 2>/dev/null || true)
+
+          # only master tags become the "latest" GitHub release
+          if git merge-base --is-ancestor HEAD origin/master; then
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+          else
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+          fi
+
           # Check if we found a valid previous tag
           if [ -z "$PREV_TAG" ]; then
             echo "No previous tag found, this is the first tag"
@@ -81,3 +89,4 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
+          make_latest: ${{ steps.get-prev-tag.outputs.make_latest }}
