@@ -82,6 +82,33 @@ jobs:
           name: artifacts-dist
           path: dist/*
 
+  build_packages:
+    name: Build scylla packages (${{ matrix.arch }})
+    # native runners, the compiled dependencies are per arch
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-24.04
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # setuptools_scm needs the tags
+
+      # the same commands scylla's configure.py runs, in scylla master's toolchain, so the
+      # dependencies are built for the python scylla-python3 packages
+      - name: Build relocatable package, rpm and deb
+        run: |
+          image=$(curl -sfL https://raw.githubusercontent.com/scylladb/scylladb/master/tools/toolchain/image)
+          docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v $PWD:$PWD -w $PWD $image bash -ec '
+            ./reloc/build_reloc.sh --version scylla-0.0.0-0.ci --nodeps
+            ./reloc/build_rpm.sh --reloc-pkg build/scylla-cqlsh-*.tar.gz
+            ./reloc/build_deb.sh --reloc-pkg build/scylla-cqlsh-*.tar.gz'
+
   integration_test_scylla:
     name: Integration Tests (Scylla, Python ${{ matrix.python-version }})
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
