@@ -950,7 +950,8 @@ class FilesReader(object):
         """
         def make_source(fname):
             try:
-                return open(fname, 'r', encoding=self.encoding)
+                # newline='' as csv requires, so \r\n inside a quoted field reaches the parser intact
+                return open(fname, 'r', newline='', encoding=self.encoding)
             except IOError as e:
                 raise IOError("Can't open %r for reading: %s" % (fname, e))
 
