@@ -22,7 +22,7 @@ import string
 import os
 
 from cassandra import InvalidRequest
-from cassandra.cluster import Cluster
+from cassandra.cluster import Cluster, NoHostAvailable
 from cassandra.metadata import maybe_escape_name as quote_name
 from cassandra.auth import PlainTextAuthProvider
 from cqlshlib.cql3handling import CqlRuleSet
@@ -127,8 +127,17 @@ def create_db():
 
 
 def remove_db():
+    ks = quote_name(TEST_KEYSPACES_CREATED.pop(-1))
     with cassandra_cursor(ks=None) as c:
-        c.execute('DROP KEYSPACE %s' % quote_name(TEST_KEYSPACES_CREATED.pop(-1)))
+        for attempts_left in (2, 1, 0):
+            try:
+                # IF EXISTS: an attempt that timed out may still have dropped it
+                c.execute('DROP KEYSPACE IF EXISTS %s' % ks)
+                return
+            except NoHostAvailable:
+                # a slow Scylla can time out the schema change ("raft operation [add_entry] timed out")
+                if not attempts_left:
+                    raise
 
 
 @contextlib.contextmanager
