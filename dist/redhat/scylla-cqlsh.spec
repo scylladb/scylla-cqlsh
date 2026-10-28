@@ -15,13 +15,11 @@ AutoReqProv:    no
 Conflicts:      cassandra
 
 %global debug_package %{nil}
+# the bundled .so files (scylla-driver) are also in scylla-python3, their build-id links would conflict
+%global _build_id_links none
 
-%global __brp_python_bytecompile %{nil}
-%global __brp_mangle_shebangs %{nil}
-%global __brp_ldconfig %{nil}
-%global __brp_strip %{nil}
-%global __brp_strip_comment_note %{nil}
-%global __brp_strip_static_archive %{nil}
+# no brp-* post-processing at all, it varies by distro (fedora's rewrites the .pyc files)
+%global __os_install_post %{nil}
 
 
 %description
@@ -42,7 +40,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/cqlsh.py
 /opt/scylladb/share/cassandra/bin/*
 /opt/scylladb/share/cassandra/libexec/*
-/opt/scylladb/share/cassandra/pylib/*
+/opt/scylladb/share/cassandra/lib
 
 
 %changelog

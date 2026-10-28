@@ -93,7 +93,7 @@ DEBIAN_SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt"
 if [ -f "\${DEBIAN_SSL_CERT_FILE}" ]; then
   c=\${DEBIAN_SSL_CERT_FILE}
 fi
-PYTHONPATH="\${d}:\${d}/../libexec:\$PYTHONPATH" PATH="\${d}/../bin:\${d}/$pythonpath:\${PATH}" SSL_CERT_FILE="\${c}" exec -a "\$0" "\${d}/../libexec/\${b}" "\$@"
+PYTHONPATH="\${d}:\${d}/../libexec:\${d}/../lib/site-packages:\$PYTHONPATH" PATH="\${d}/../bin:\${d}/$pythonpath:\${PATH}" SSL_CERT_FILE="\${c}" exec -a "\$0" "\${d}/../libexec/\${b}" "\$@"
 EOF
     chmod 755 "$install"
 }
@@ -126,8 +126,11 @@ if ! $nonroot; then
 fi
 
 # scylla-cqlsh
-install -d -m755 "$rprefix"/share/cassandra/pylib
-cp -rp pylib/cqlshlib "$rprefix"/share/cassandra/pylib
+# pylib held cqlshlib before it moved to lib/site-packages; cqlsh.py prefers pylib, so a
+# --nonroot upgrade mustn't leave the old one behind
+rm -rf "$rprefix"/share/cassandra/pylib "$rprefix"/share/cassandra/lib/site-packages
+install -d -m755 "$rprefix"/share/cassandra/lib
+cp -rp lib/site-packages "$rprefix"/share/cassandra/lib
 
 for i in bin/{cqlsh,cqlsh.py} ; do
     bn=$(basename $i)
