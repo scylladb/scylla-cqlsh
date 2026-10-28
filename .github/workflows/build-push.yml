@@ -4,19 +4,18 @@ on:
   pull_request:
     branches:
      - master
+     - 'branch-*'
   push:
     tags:
       - '*'
     branches:
       - master
+      - 'branch-*'
 
 permissions:
   contents: read
 
 env:
-  CIBW_SKIP: cp36* cp37* cp38* cp39* pp*
-  # build cp315 wheels while 3.15 is still a release candidate; no-op once it's final
-  CIBW_ENABLE: cpython-prerelease
   # Test modules that need a live cluster; the unit test job runs everything else.
   PYTEST_IGNORE_CLUSTER_TESTS: >-
     --ignore=./cqlshlib/test/test_copy_data.py
@@ -43,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15']
+        python-version: ['3.12', '3.13', '3.14', '3.15']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,40 +64,50 @@ jobs:
           uv pip install --system -r ./pylib/requirements.txt setuptools_scm
           pytest ./cqlshlib/test ${{ env.PYTEST_IGNORE_CLUSTER_TESTS }}
 
-  build_wheels:
-    name: Build wheels (${{ matrix.os }})
-    if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-14, macos-15-intel]
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@f9b966cfadf4109556cadc5bb39ddb72d0ce664e # v4.3.5
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: artifacts-wheels-${{ matrix.os }}
-          path: ./wheelhouse/*.whl
-
-  build_sdist:
-    name: Build source distribution
+  build_dist:
+    name: Build wheel and sdist
     if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Build sdist
-        run: |
-          pipx run build --sdist
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      # pure python, one py3-none-any wheel covers every platform
+      - name: Build
+        run: uv build
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: artifacts-source-dist
-          path: dist/*.tar.gz
+          name: artifacts-dist
+          path: dist/*
+
+  build_packages:
+    name: Build scylla packages (${{ matrix.arch }})
+    # native runners, the compiled dependencies are per arch
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-24.04
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # setuptools_scm needs the tags
+
+      # the same commands scylla's configure.py runs, in scylla master's toolchain, so the
+      # dependencies are built for the python scylla-python3 packages
+      - name: Build relocatable package, rpm and deb
+        run: |
+          image=$(curl -sfL https://raw.githubusercontent.com/scylladb/scylladb/master/tools/toolchain/image)
+          docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v $PWD:$PWD -w $PWD $image bash -ec '
+            ./reloc/build_reloc.sh --version scylla-0.0.0-0.ci --nodeps
+            ./reloc/build_rpm.sh --reloc-pkg build/scylla-cqlsh-*.tar.gz
+            ./reloc/build_deb.sh --reloc-pkg build/scylla-cqlsh-*.tar.gz'
 
   integration_test_scylla:
     name: Integration Tests (Scylla, Python ${{ matrix.python-version }})
@@ -108,7 +117,7 @@ jobs:
       fail-fast: false
       matrix:
         # oldest and newest interpreters we claim to support
-        python-version: ['3.10', '3.15']
+        python-version: ['3.12', '3.15']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -171,6 +180,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # to tell whether the tag is on master
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -191,6 +202,10 @@ jobs:
           split=(${GITHUB_REF_NAME//-/ })
           DOCKER_TAG=${split[0]}
           echo DOCKER_TAG=$DOCKER_TAG >> $GITHUB_ENV
+          # a tag on a branch-* mustn't move :latest back
+          if git merge-base --is-ancestor HEAD origin/master; then
+            echo LATEST_TAG=scylladb/scylla-cqlsh:latest >> $GITHUB_ENV
+          fi
 
       - name: Build and push release
         if: endsWith(github.event.ref, '-scylla')
@@ -202,7 +217,7 @@ jobs:
           push: true
           tags: |
             scylladb/scylla-cqlsh:${{ env.DOCKER_TAG }}
-            scylladb/scylla-cqlsh:latest
+            ${{ env.LATEST_TAG }}
 
       - name: Build and push master
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -216,7 +231,7 @@ jobs:
             scylladb/scylla-cqlsh:master
 
   upload_pypi:
-    needs: [unit_tests, build_wheels, build_sdist, integration_test_scylla, integration_test_cassandra]
+    needs: [unit_tests, build_dist, integration_test_scylla, integration_test_cassandra]
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
