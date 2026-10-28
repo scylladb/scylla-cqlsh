@@ -76,15 +76,27 @@ if $VERBOSE; then
     TAR_EXTRA_OPTS="--verbose"
 else
     PIP_EXTRA_OPTS="--quiet"
-    ZIP_EXTRA_OPTS="--quiet"
 fi
 
 # Configure pip to retry on network failures (helps with timeout issues)
 export PIP_RETRIES=10
 
-python3 -m pip install ${PIP_EXTRA_OPTS} shiv==1.0.6 build==0.10.0 wheel==0.46.0 -t ./build/cqlsh_build
+# cqlsh and all its dependencies, scylla-driver included, in a directory of their own,
+# so the package doesn't depend on what's installed into scylla-python3.
+# The compiled ones are built for this python3, which has to be the one scylla-python3 packages.
+rm -rf build/site-packages
+# wheels from PyPI when there are some for this python, otherwise built from source (pip caches those)
+python3 -m pip install ${PIP_EXTRA_OPTS} -c requirements.txt --target build/site-packages .
+# console scripts with this host's interpreter in the shebang, install.sh makes our own
+rm -rf build/site-packages/bin
+# hash-based, so the .pyc stay valid after rpm clamps the mtimes, and root runs write nothing under /opt
+python3 -m compileall -q -f --invalidation-mode checked-hash build/site-packages > /dev/null
 
-PYTHONPATH=$(pwd)/build/cqlsh_build python3 -m shiv -c cqlsh -o bin/cqlsh -- . -c requirements.txt
+# create-relocatable-package.py needs it, scylla's toolchain has it
+if ! command -v patchelf > /dev/null; then
+    python3 -m pip install ${PIP_EXTRA_OPTS} patchelf==0.17.2.4 -t ./build/cqlsh_build
+    export PATH="$(pwd)/build/cqlsh_build/bin:$PATH"
+fi
 
 dist/debian/debian_files_gen.py
 scripts/create-relocatable-package.py --version $VERSION "$DEST"
