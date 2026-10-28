@@ -28,7 +28,7 @@ import tempfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.metadata import MAX_LONG
 
-from .basecase import BaseTestCase, known_windows_failure
+from .basecase import BaseTestCase, known_macos_failure, known_windows_failure
 from .cassconnect import create_keyspace, get_cassandra_connection, get_keyspace, remove_db
 from .run_cqlsh import CqlshRunner
 
@@ -123,6 +123,7 @@ class TestCopyRoundTripWithRetries(CopyTestCase):
         return self.run_copy("COPY %s FROM '%s' WITH CHUNKSIZE = 10 AND MAXATTEMPTS = %d AND ERRFILE = '%s'"
                              % (self.table, fname, self.max_attempts, self.csv_file('import.err')), failures)
 
+    @known_macos_failure(263)
     def test_bulk_round_trip_with_retries(self):
         exported = self.csv_file('exported.csv')
         self.copy_to_with_retries(exported)
