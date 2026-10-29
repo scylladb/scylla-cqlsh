@@ -48,8 +48,20 @@ export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}
 while ! nc -z ${CQL_TEST_HOST} 9042; do   
   sleep 0.1 # wait for 1/10 of the second before check again
 done
-          
- 
+
+# or, to also run test_ssl.py, start it with TLS on 9142 (client cert required) instead;
+# the certs come from openssl only, no Java needed
+export CQL_SSL_TEST_CERTS=/tmp/cqlsh-certs CQL_SSL_TEST_PORT=9142
+python scripts/gen-test-certs.py ${CQL_SSL_TEST_CERTS}
+export DOCKER_ID=$(docker run -d -v ${CQL_SSL_TEST_CERTS}:/certs:ro scylladb/scylla:latest --cluster-name test \
+  --native-transport-port-ssl 9142 \
+  --client-encryption-options enabled=true \
+  --client-encryption-options certificate=/certs/server.pem \
+  --client-encryption-options keyfile=/certs/server.key \
+  --client-encryption-options truststore=/certs/ca.pem \
+  --client-encryption-options require_client_auth=true)
+export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
+
 # run scylla with CCM
 ccm create cqlsh_cluster -n 1 --scylla --version unstable/master:latest
 ccm start
