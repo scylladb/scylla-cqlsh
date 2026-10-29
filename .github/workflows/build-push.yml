@@ -28,6 +28,7 @@ env:
     --ignore=./cqlshlib/test/test_escape_sequences.py
     --ignore=./cqlshlib/test/test_formatting.py
     --ignore=./cqlshlib/test/test_proxy_access.py
+    --ignore=./cqlshlib/test/test_ssl.py
     --ignore=./cqlshlib/test/test_unicode.py
   # Pinned so a PR's integration result depends on the PR, not on when it ran;
   # Renovate bumps them in their own PRs.
@@ -124,13 +125,24 @@ jobs:
 
       - name: Start Scylla
         run: |
-          export DOCKER_ID=$(docker run -d scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test )
+          # 9042 stays plain for the suite; 9142 is TLS with a required client cert, for test_ssl.py
+          export CQL_SSL_TEST_CERTS=${RUNNER_TEMP}/certs
+          python ./scripts/gen-test-certs.py ${CQL_SSL_TEST_CERTS}
+          export DOCKER_ID=$(docker run -d -v ${CQL_SSL_TEST_CERTS}:/certs:ro scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test \
+            --native-transport-port-ssl 9142 \
+            --client-encryption-options enabled=true \
+            --client-encryption-options certificate=/certs/server.pem \
+            --client-encryption-options keyfile=/certs/server.key \
+            --client-encryption-options truststore=/certs/ca.pem \
+            --client-encryption-options require_client_auth=true )
           export CQL_TEST_HOST=$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${DOCKER_ID})
-          while ! nc -z ${CQL_TEST_HOST} 9042; do   
+          while ! nc -z ${CQL_TEST_HOST} 9042 || ! nc -z ${CQL_TEST_HOST} 9142; do
             sleep 0.1 # wait for 1/10 of the second before check again
           done
 
           echo "CQL_TEST_HOST=${CQL_TEST_HOST}" >> $GITHUB_ENV
+          echo "CQL_SSL_TEST_PORT=9142" >> $GITHUB_ENV
+          echo "CQL_SSL_TEST_CERTS=${CQL_SSL_TEST_CERTS}" >> $GITHUB_ENV
 
       - name: pytest
         run: |
