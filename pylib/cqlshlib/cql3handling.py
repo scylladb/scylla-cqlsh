@@ -225,7 +225,13 @@ syntax_rules = r'''
 <CQL_Statement> ::= [statements]=<statementBody> ";"
                   ;
 
-# the order of these terminal productions is significant:
+# The order of these terminal productions is significant: at each position the
+# lexer picks the FIRST rule that matches, not the longest one. Hence:
+#  - complete string literals/quoted names come before comments' unclosed
+#    forms, so '/*' or '*/' inside a string stays part of the string;
+#  - the unclosed* rules come right after them and before <op>, otherwise
+#    an unterminated '/*' would lex as <op> '/' + <star> '*' and cqlsh would
+#    not know it has to keep reading lines until the matching '*/'.
 <endline> ::= /\n/ ;
 
 JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
@@ -235,6 +241,12 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
 <quotedStringLiteral> ::= /'([^']|'')*'/ ;
 <pgStringLiteral> ::= /\$\$(?:(?!\$\$).)*\$\$/;
 <quotedName> ::=    /"([^"]|"")*"/ ;
+
+<unclosedPgString>::= /\$\$(?:(?!\$\$).)*/ ;
+<unclosedString>  ::= /'([^']|'')*/ ;
+<unclosedName>    ::= /"([^"]|"")*/ ;
+<unclosedComment> ::= /[/][*].*$/ ;
+
 <float> ::=         /-?[0-9]+\.[0-9]+/ ;
 <uuid> ::=          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ ;
 <blobLiteral> ::=    /0x[0-9a-f]+/ ;
@@ -251,11 +263,6 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
 <boolean> ::= "true"
             | "false"
             ;
-
-<unclosedPgString>::= /\$\$(?:(?!\$\$).)*/ ;
-<unclosedString>  ::= /'([^']|'')*/ ;
-<unclosedName>    ::= /"([^"]|"")*/ ;
-<unclosedComment> ::= /[/][*].*$/ ;
 
 <term> ::= <stringLiteral>
          | <integer>
