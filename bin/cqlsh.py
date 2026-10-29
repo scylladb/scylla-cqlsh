@@ -581,7 +581,6 @@ class Shell(cmd.Cmd):
 
         self.statement = StringIO()
         self.lineno = 1
-        self.in_comment = False
 
         self.prompt = ''
         if stdin is None:
@@ -987,29 +986,11 @@ class Shell(cmd.Cmd):
                     self.reset_statement()
                     print('')
 
-    def strip_comment_blocks(self, statementtext):
-        comment_block_in_literal_string = re.search('["].*[/][*].*[*][/].*["]', statementtext)
-        if not comment_block_in_literal_string:
-            result = re.sub('[/][*].*[*][/]', "", statementtext)
-            if '*/' in result and '/*' not in result and not self.in_comment:
-                raise SyntaxError("Encountered comment block terminator without being in comment block")
-            if '/*' in result:
-                result = re.sub('[/][*].*', "", result)
-                self.in_comment = True
-            if '*/' in result:
-                result = re.sub('.*[*][/]', "", result)
-                self.in_comment = False
-            if self.in_comment and not re.findall('[/][*]|[*][/]', statementtext):
-                result = ''
-            return result
-        return statementtext
-
     def onecmd(self, statementtext):
         """
         Returns true if the statement is complete and was handled (meaning it
         can be reset).
         """
-        statementtext = self.strip_comment_blocks(statementtext)
         try:
             statements, endtoken_escaped = cqlruleset.cql_split_statements(statementtext)
         except pylexotron.LexingError as e:
@@ -1027,6 +1008,13 @@ class Shell(cmd.Cmd):
             statements = statements[:-1]
         if not statements:
             return True
+        # A "/*" not closed yet must not hold back the complete statements
+        # before it, e.g. "SELECT ...; /* note": run them now and keep only
+        # the comment in the buffer until its "*/" shows up.
+        open_comment = None
+        if not endtoken_escaped and len(statements) > 1 \
+                and [t[0] for t in statements[-1]] == ['unclosedComment']:
+            open_comment = statements.pop()[0][1]
         if endtoken_escaped or statements[-1][-1][0] != 'endtoken':
             self.set_continue_prompt()
             return
@@ -1038,6 +1026,11 @@ class Shell(cmd.Cmd):
                     traceback.print_exc()
                 else:
                     self.printerr(e)
+        if open_comment is not None:
+            self.reset_statement()
+            self.statement.write(open_comment)
+            self.set_continue_prompt()
+            return
         return True
 
     def handle_eof(self):

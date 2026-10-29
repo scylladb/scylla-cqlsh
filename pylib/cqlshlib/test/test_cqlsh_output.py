@@ -1046,6 +1046,51 @@ class TestCqlshOutput(BaseTestCase):
         self.assertNotIn('Failed to format', output)
         self.assertIn(' [0.5] | [0.1, 0.2, 0.3] | [[1, 2, 3], [4, 5, 6]]', output)
 
+    def test_comment_markers_inside_string_literals(self):
+        """
+        '/*' and '*/' inside string literals must not be treated as comment
+        delimiters, while real block comments (also spanning several input
+        lines) are still skipped. https://github.com/scylladb/scylla-cqlsh/issues/58
+        """
+        query = dedent("""
+            CREATE TABLE comment_markers (k text PRIMARY KEY, v text);
+            INSERT INTO comment_markers (k, v) VALUES ('role1', 'test_role./-');
+            INSERT INTO comment_markers (k, v) VALUES ('role2', 'test_role./*');
+            INSERT INTO comment_markers (k, v) VALUES ('role3', 'test_role./_');
+            /* a real comment
+               spanning lines; with a ';' inside */
+            INSERT INTO comment_markers (k, v) /* inline */ VALUES ('role4', '*/');
+            SELECT k, v FROM comment_markers WHERE k IN ('role1', 'role2', 'role3', 'role4');
+            DROP TABLE comment_markers;
+        """)
+        output, result = testcall_cqlsh(prompt=None, env=self.default_env,
+                                        tty=False, input=query)
+        self.assertEqual(0, result, output)
+        self.assertNotIn('Incomplete statement', output)
+        self.assertIn('(4 rows)', output)
+        for k, v in [('role1', 'test_role./-'), ('role2', 'test_role./*'),
+                     ('role3', 'test_role./_'), ('role4', '*/')]:
+            self.assertRegex(output, rf'{re.escape(k)} \| +{re.escape(v)}')
+
+    def test_statement_before_open_block_comment(self):
+        """
+        A complete statement followed by a "/*" on the same line runs, whether
+        the comment is closed on a later line or never closed at all.
+        """
+        query = dedent("""
+            SELECT b FROM twenty_rows_table WHERE a = '1'; /* starts here
+            SELECT b FROM twenty_rows_table WHERE a = '2'; still a comment */
+            SELECT b FROM twenty_rows_table WHERE a = '3'; /* never closed
+        """)
+        output, _ = testcall_cqlsh(prompt=None, env=self.default_env,
+                                   tty=False, input=query)
+        self.assertEqual(2, output.count('(1 rows)'), output)
+        self.assertIn('Incomplete statement at end of file', output)
+        values = [line.strip() for line in output.splitlines()]
+        self.assertIn('1', values)
+        self.assertNotIn('2', values)
+        self.assertIn('3', values)
+
     def test_expanded_output_counts_past_page(self):
         query = "PAGING 5; EXPAND ON; SELECT * FROM twenty_rows_table;"
         output, result = testcall_cqlsh(prompt=None, env=self.default_env,
