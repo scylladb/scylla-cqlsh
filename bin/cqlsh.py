@@ -978,8 +978,16 @@ class Shell(cmd.Cmd):
                         self.stop = True
                     else:
                         line = self.get_input_line(self.prompt)
+                    first_line = self.statement.tell() == 0
                     self.statement.write(line)
-                    if self.onecmd(self.statement.getvalue()):
+                    # Re-parsing the whole buffer after every line is O(n^2) for large
+                    # multi-line statements (a 1MB WASM UDF took hours). When not on a tty,
+                    # only parse when the statement may be complete: on its first line
+                    # (newline-terminated commands, e.g. CONSISTENCY), on a line ending
+                    # with ';', or on/inside a comment (a skipped parse can lose statements).
+                    if (self.tty or first_line or self.in_comment or line.rstrip().endswith(';')
+                            or any(m in line for m in ('--', '//', '/*', '*/'))) \
+                            and self.onecmd(self.statement.getvalue()):
                         self.reset_statement()
                 except EOFError:
                     self.handle_eof()
