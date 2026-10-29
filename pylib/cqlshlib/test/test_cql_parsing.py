@@ -17,6 +17,7 @@
 # to configure behavior, define $CQL_TEST_HOST to the destination address
 # and $CQL_TEST_PORT to the associated port.
 
+from textwrap import dedent
 from unittest import TestCase
 from operator import itemgetter
 
@@ -800,6 +801,41 @@ class TestCqlParsing(TestCase):
                                */ SELECT FROM "MyTable";
                                ''')
         self.assertRaises(SyntaxError)
+
+    def test_comment_markers_inside_literals(self):
+        """
+        '/*' and '*/' inside string literals, $$ strings and quoted names are
+        data, not comment delimiters, and must not swallow following statements.
+        Reproducer from https://github.com/scylladb/scylla-cqlsh/issues/58
+        """
+        statements, _ = CqlRuleSet.cql_split_statements(dedent('''
+            INSERT INTO t (k, v) VALUES ('role1', 'test_role./-');
+            INSERT INTO t (k, v) VALUES ('role2', 'test_role./*');
+            INSERT INTO t (k, v) VALUES ('role3', $$ends with /*$$);
+            SELECT "col/*" FROM t;
+            INSERT INTO t (k, v) VALUES ('role4', '*/');
+            '''))
+        statements = strip_final_empty_items(statements)
+        self.assertEqual(5, len(statements))
+        self.assertEqual(['endtoken'] * 5, [st[-1][0] for st in statements])
+        self.assertEqual(("'test_role./*'", 'quotedStringLiteral'),
+                         tokens_with_types(statements[1])[-3])
+        self.assertEqual(('$$ends with /*$$', 'pgStringLiteral'),
+                         tokens_with_types(statements[2])[-3])
+        self.assertEqual(('"col/*"', 'quotedName'),
+                         tokens_with_types(statements[3])[1])
+        self.assertEqual(("'*/'", 'quotedStringLiteral'),
+                         tokens_with_types(statements[4])[-3])
+
+    def test_unclosed_comment_is_lexed_as_a_whole(self):
+        """
+        An unterminated '/*' must lex as a single unclosedComment token (not as
+        '/' and '*'), so the statement does not end with an endtoken and cqlsh
+        keeps reading lines until the comment and the statement are closed.
+        """
+        statements, _ = CqlRuleSet.cql_split_statements("SELECT * FROM t /* starts here\n and ; continues")
+        self.assertEqual(('/* starts here\n and ; continues', 'unclosedComment'),
+                         tokens_with_types(statements[-1])[-1])
 
 
 def parse_cqlsh_statements(text):
