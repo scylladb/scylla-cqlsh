@@ -233,7 +233,7 @@ jobs:
   integration_test_scylla_macos:
     name: Integration Tests (Scylla in colima, macOS)
     if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
-    runs-on: macos-15-intel
+    runs-on: macos-26-intel
     # a good run takes ~50 minutes, and slow runners can take far longer (setup alone has taken 33)
     timeout-minutes: 90
     steps:
