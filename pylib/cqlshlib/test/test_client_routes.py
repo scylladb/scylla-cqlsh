@@ -175,6 +175,7 @@ def test_login_reconnect_preserves_client_routes(cqlsh_module):
     shell.client_routes_config = client_routes_config
     shell.no_compression = False
     shell.profiles = {cqlsh_module.EXEC_PROFILE_DEFAULT: profile}
+    shell.new_load_balancing_policy = lambda: cqlsh_module.Shell.new_load_balancing_policy(shell)
     shell.current_keyspace = 'testks'
     shell.session.max_trace_wait = 10
 

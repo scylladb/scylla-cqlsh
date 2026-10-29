@@ -516,16 +516,12 @@ class Shell(cmd.Cmd):
             if self.is_unix_socket(self.hostname):
                 self.contact_points = (UnixSocketEndPoint(self.hostname),)
                 kwargs['contact_points'] = self.contact_points
-                if client_routes_config is None:
-                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy(self.contact_points)
             else:
                 self.contact_points = tuple(contact_points) if contact_points else (self.hostname,)
                 kwargs['contact_points'] = self.contact_points
-                if client_routes_config is None:
-                    self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = WhiteListRoundRobinPolicy(self.contact_points)
+            self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = self.new_load_balancing_policy()
             if client_routes_config is not None:
                 kwargs['client_routes_config'] = client_routes_config
-                self.profiles[EXEC_PROFILE_DEFAULT].load_balancing_policy = RoundRobinPolicy()
             kwargs['port'] = self.port
             kwargs['ssl_context'] = sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None
             # workaround until driver would know not to lose the DNS names for `server_hostname`
@@ -603,6 +599,11 @@ class Shell(cmd.Cmd):
         self.statement_error = False
         self.single_statement = single_statement
         self.is_subshell = is_subshell
+
+    def new_load_balancing_policy(self):
+        if self.client_routes_config is not None:
+            return RoundRobinPolicy()
+        return WhiteListRoundRobinPolicy(self.contact_points)
 
     def is_unix_socket(self, path):
         """
@@ -2230,8 +2231,7 @@ class Shell(cmd.Cmd):
         # unable to run anything
         profiles = {name: copy.copy(profile) for name, profile in self.profiles.items()}
         for profile in profiles.values():
-            profile.load_balancing_policy = (RoundRobinPolicy() if self.client_routes_config is not None
-                                             else WhiteListRoundRobinPolicy(self.contact_points))
+            profile.load_balancing_policy = self.new_load_balancing_policy()
 
         conn = Cluster(cql_version=self.conn.cql_version,
                        protocol_version=self.conn.protocol_version,
