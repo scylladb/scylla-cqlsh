@@ -127,7 +127,8 @@ class ProcRunner:
         self.tty = tty
         if env is None:
             env = {}
-        self.env = env
+        # tests check exact output, so never print the AI agent skills hint
+        self.env = dict(env, CQLSH_NO_AGENT_HINT='1')
         self.readbuf = ''
         # a read can end mid-character, so keep the partial bytes for the next read
         self.decoder = codecs.getincrementaldecoder('utf-8')()
