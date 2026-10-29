@@ -190,14 +190,25 @@ else:
 cqldocs = None
 cqlruleset = None
 
+AGENT_SKILLS_URL = 'https://github.com/scylladb/agent-skills'
+AGENT_ENV_VARS = ('CLAUDECODE', 'CURSOR_AGENT', 'CODEX_SANDBOX', 'GEMINI_CLI', 'AI_AGENT')
+AGENT_HINT_STATEMENT_RE = re.compile(
+    r'^\s*CREATE\s+(TABLE|COLUMNFAMILY|(CUSTOM\s+)?INDEX|MATERIALIZED\s+VIEW|KEYSPACE)\b|\bALLOW\s+FILTERING\b',
+    re.IGNORECASE)
+
 epilog = """Connects to %(DEFAULT_HOST)s:%(DEFAULT_PORT)d by default. These
 defaults can be changed by setting $CQLSH_HOST and/or $CQLSH_PORT. When a
 host (and optional port number) are given on the command line, they take
-precedence over any defaults.""" % globals()
+precedence over any defaults.
+
+Using cqlsh from an AI coding agent? See the ScyllaDB agent skills:
+%(AGENT_SKILLS_URL)s""" % globals()
 
 parser = optparse.OptionParser(description=description, epilog=epilog,
                                usage="Usage: %prog [options] [host [port]]",
                                version='cqlsh ' + version)
+# keep the epilog's own line breaks, so the agent skills note stays a separate paragraph
+parser.format_epilog = lambda formatter: '\n' + epilog + '\n'
 parser.add_option("-C", "--color", action='store_true', dest='color',
                   help='Always use color output')
 parser.add_option("--no-color", action='store_false', dest='color',
@@ -244,6 +255,8 @@ parser.add_option("--request-timeout", default=DEFAULT_REQUEST_TIMEOUT_SECONDS, 
                   help='Specify the default request timeout in seconds (default: %default seconds).')
 parser.add_option("-t", "--tty", action='store_true', dest='tty',
                   help='Force tty mode (command prompt).')
+parser.add_option('--no-agent-hint', action='store_true', dest='no_agent_hint',
+                  help='Do not print the AI agent skills hint (also: $CQLSH_NO_AGENT_HINT).')
 parser.add_option('-v', action="version", help='Print the current version of cqlsh.')
 
 # This is a hidden option to suppress the warning when the -p/--password command line option is used.
@@ -451,6 +464,7 @@ class Shell(cmd.Cmd):
     last_hist = None
     shunted_query_out = None
     use_paging = True
+    agent_hint = False
 
     default_page_size = 100
 
@@ -1174,6 +1188,7 @@ class Shell(cmd.Cmd):
 
         future = self.session.execute_async(statement, trace=self.tracing_enabled)
         result = None
+        err_msg = None
         try:
             result = future.result()
         except CQL_ERRORS as err:
@@ -1181,7 +1196,11 @@ class Shell(cmd.Cmd):
             self.printerr(str(err.__class__.__name__) + ": " + err_msg)
         except Exception:
             import traceback
-            self.printerr(traceback.format_exc())
+            err_msg = traceback.format_exc()
+            self.printerr(err_msg)
+
+        if self.agent_hint:
+            self.print_agent_hint(statement.query_string, err_msg)
 
         # Even if statement failed we try to refresh schema if not agreed (see CASSANDRA-9689)
         if not future.is_schema_agreed:
@@ -1207,6 +1226,21 @@ class Shell(cmd.Cmd):
             self.print_static_result(result, self.parse_for_update_meta(statement.query_string), with_header=True, tty=self.tty)
         self.flush_output()
         return True, future
+
+    def print_agent_hint(self, query_string, err_msg):
+        """
+        Point an AI coding agent to the ScyllaDB agent skills, at most once per run: when a statement
+        fails, or when it creates schema or uses ALLOW FILTERING, which is when the skills help most.
+        """
+        if err_msg is not None and 'ALLOW FILTERING' in err_msg:
+            hint = "don't add ALLOW FILTERING, create a table for this query instead. See"
+        elif err_msg is not None or AGENT_HINT_STATEMENT_RE.search(query_string):
+            hint = "for ScyllaDB data modeling and query advice, see"
+        else:
+            return
+        self.agent_hint = False
+        sys.stderr.write("cqlsh: %s %s (disable with --no-agent-hint or CQLSH_NO_AGENT_HINT=1)\n"
+                         % (hint, AGENT_SKILLS_URL))
 
     def print_result(self, result, table_meta):
         self.decoding_errors = []
@@ -2542,6 +2576,13 @@ def build_client_routes_config(routes, advanced_shard_awareness):
         advanced_shard_awareness=advanced_shard_awareness)
 
 
+def should_print_agent_hint(options, environ=os.environ):
+    return (not options.no_agent_hint
+            and not environ.get('CQLSH_NO_AGENT_HINT')
+            and not sys.stdout.isatty()
+            and any(environ.get(var) for var in AGENT_ENV_VARS))
+
+
 def should_use_color():
     if not sys.stdout.isatty():
         return False
@@ -2608,6 +2649,7 @@ def read_options(cmdlineargs, environment):
         parser.error(str(e))
 
     optvalues.debug = False
+    optvalues.no_agent_hint = False
     optvalues.driver_debug = False
     optvalues.coverage = False
     if 'CQLSH_COVERAGE' in environment.keys():
@@ -2882,6 +2924,7 @@ def main(options, hostname, port):
         sys.exit('Unsupported CQL version: %s' % (e,))
     if options.debug:
         shell.debug = True
+    shell.agent_hint = should_print_agent_hint(options)
     if options.coverage:
         shell.coverage = True
         import signal
