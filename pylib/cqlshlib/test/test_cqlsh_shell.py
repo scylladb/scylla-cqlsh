@@ -208,7 +208,10 @@ class TestCqlshShell(BaseTestCase):
         self.assertIn('Now Tracing is enabled', output)
         self.assertIn('rows)', output)
         self.assertNotIn('Tracing session: ', output)
-        output = self.run_cqlsh('TRACING ON; USE system_traces; SELECT * FROM sessions LIMIT 10;')
+        # --keyspace rather than USE: scylla-driver 3.29.12 can fail a USE issued right after connecting,
+        # or miss a shard connection that is still opening (scylladb/python-driver#1103)
+        output, _ = call_cqlsh_for_test(input='TRACING ON; SELECT * FROM sessions LIMIT 10;', env=self.env,
+                                        keyspace='system_traces')
         self.assertIn('rows)', output)
         self.assertNotIn('Tracing session: ', output)
 
