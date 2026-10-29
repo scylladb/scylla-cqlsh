@@ -193,9 +193,9 @@ def test_login_reconnect_preserves_client_routes(cqlsh_module):
     call_kwargs = mock_cluster.call_args[1]
     assert call_kwargs['contact_points'] == contact_points
     assert call_kwargs['client_routes_config'] is client_routes_config
-    assert call_kwargs['execution_profiles'] is shell.profiles
     profile = call_kwargs['execution_profiles'][cqlsh_module.EXEC_PROFILE_DEFAULT]
     assert isinstance(profile.load_balancing_policy, cqlsh_module.RoundRobinPolicy)
+    assert profile.load_balancing_policy is not shell.profiles[cqlsh_module.EXEC_PROFILE_DEFAULT].load_balancing_policy
     mock_cluster.return_value.connect.assert_called_once_with('testks')
     assert shell.conn is mock_cluster.return_value
     assert shell.session is session
@@ -290,7 +290,7 @@ def test_subshell_login_reconnects_with_the_parent_connection_settings(cqlsh_mod
     client_routes_config = object()
     contact_points = ('proxy-a.example.com', 'proxy-b.example.com')
     profiles = {cqlsh_module.EXEC_PROFILE_DEFAULT: cqlsh_module.ExecutionProfile(
-        load_balancing_policy=cqlsh_module.RoundRobinPolicy())}
+        load_balancing_policy=cqlsh_module.RoundRobinPolicy(), request_timeout=42)}
 
     subshell = cqlsh_module.Shell('proxy-a.example.com', 9042,
                                   tty=False,
@@ -316,12 +316,12 @@ def test_subshell_login_reconnects_with_the_parent_connection_settings(cqlsh_mod
         subshell.do_login(parsed)
 
     call_kwargs = mock_cluster.call_args[1]
-    assert call_kwargs['execution_profiles'] is profiles
     assert call_kwargs['client_routes_config'] is client_routes_config
     assert call_kwargs['contact_points'] == contact_points
     assert call_kwargs['compression'] is False
     profile = call_kwargs['execution_profiles'][cqlsh_module.EXEC_PROFILE_DEFAULT]
     assert isinstance(profile.load_balancing_policy, cqlsh_module.RoundRobinPolicy)
+    assert profile.request_timeout == 42
 
 
 def test_shell_builds_default_profiles_when_none_are_passed(cqlsh_module):

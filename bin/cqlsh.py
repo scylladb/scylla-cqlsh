@@ -19,6 +19,7 @@
 import cmd
 import codecs
 import configparser
+import copy
 import csv
 import getpass
 import optparse
@@ -2224,12 +2225,20 @@ class Shell(cmd.Cmd):
         if self.no_compression:
             kwargs['compression'] = False
 
+        # a policy keeps state about the cluster it serves, so this one mustn't share the live
+        # session's: with scylla-driver 3.29.12 a LOGIN with a bad password left the session
+        # unable to run anything
+        profiles = {name: copy.copy(profile) for name, profile in self.profiles.items()}
+        for profile in profiles.values():
+            profile.load_balancing_policy = (RoundRobinPolicy() if self.client_routes_config is not None
+                                             else WhiteListRoundRobinPolicy(self.contact_points))
+
         conn = Cluster(cql_version=self.conn.cql_version,
                        protocol_version=self.conn.protocol_version,
                        auth_provider=auth_provider,
                        control_connection_timeout=self.conn.connect_timeout,
                        connect_timeout=self.conn.connect_timeout,
-                       execution_profiles=self.profiles,
+                       execution_profiles=profiles,
                        **kwargs)
 
         if self.current_keyspace:
