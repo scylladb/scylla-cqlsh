@@ -119,7 +119,8 @@ class ProcRunner:
         self.tty = tty
         if env is None:
             env = {}
-        self.env = env
+        # tests check exact output, so never print the AI agent skills hint
+        self.env = dict(env, CQLSH_NO_AGENT_HINT='1')
         self.readbuf = ''
 
         self.start_proc()
