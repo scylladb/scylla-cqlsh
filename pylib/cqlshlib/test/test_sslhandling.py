@@ -64,6 +64,7 @@ def test_env_certfile_beats_cqlshrc(tmp_path, certs):
 def test_certfile_tilde_is_expanded(tmp_path, certs, monkeypatch):
     shutil.copy(certs / 'ca.pem', tmp_path / 'ca.pem')
     monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))  # what expanduser reads on Windows
     rc = write_cqlshrc(tmp_path, '[ssl]\ncertfile = ~/ca.pem\n')
     ssl_settings('host1', rc, env={})
 
