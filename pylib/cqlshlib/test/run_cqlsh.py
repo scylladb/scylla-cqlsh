@@ -262,6 +262,10 @@ class CqlshRunner(ProcRunner):
         coverage = False
         if ('CQLSH_COVERAGE' in env.keys()):
             coverage = True
+        if basecase.TIMEOUT_SCALE != 1:
+            # cqlsh's own 10s/5s defaults; put first so a test that sets either one still wins
+            args = ('--request-timeout=%d' % round(10 * basecase.TIMEOUT_SCALE),
+                    '--connect-timeout=%d' % round(5 * basecase.TIMEOUT_SCALE)) + tuple(args)
         args = tuple(args) + (host, str(port))
         if cqlver is not None:
             args += ('--cqlversion', str(cqlver))
