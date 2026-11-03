@@ -1,4 +1,6 @@
--r ../requirements.txt
+scylla-driver
+# version pinned in requirements.txt, so a driver bump there is what the tests run
+-c ../requirements.txt
 # Used ccm version is tracked by cassandra-test branch in ccm repo. Please create a PR there for fixes or upgrades to new releases.
 https://github.com/scylladb/scylla-ccm/archive/master.zip
 coverage
