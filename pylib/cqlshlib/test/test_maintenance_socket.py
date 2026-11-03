@@ -14,12 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# cqlsh against the Unix maintenance socket ($CQL_MAINTENANCE_SOCKET) of a Scylla node started
-# with --maintenance-mode true and authentication on, as scylladb's test_maintenance_mode,
-# test_maintenance_socket and test_describe do with the driver directly.
-# The node never joins the ring, so it owns no tokens; drivers that only open query pools to
-# token owners (scylla-driver 3.29.8) can't run a single query here.
-# The socket skips authentication, so no credentials are passed.
+# cqlsh against a Scylla node's Unix maintenance socket ($CQL_MAINTENANCE_SOCKET), the path
+# scylladb's test_maintenance_mode, test_maintenance_socket and test_describe use with the driver
+# directly. The socket isn't the node's address in system.peers/system.local, so a driver that
+# only opens query pools to hosts it discovered (scylla-driver 3.29.8) can't run a single query.
 
 import os
 

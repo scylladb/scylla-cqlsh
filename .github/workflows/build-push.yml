@@ -140,7 +140,11 @@ jobs:
           # 9042 stays plain for the suite; 9142 is TLS with a required client cert, for test_ssl.py
           export CQL_SSL_TEST_CERTS=${RUNNER_TEMP}/certs
           python ./scripts/gen-test-certs.py ${CQL_SSL_TEST_CERTS}
-          export DOCKER_ID=$(docker run -d -v ${CQL_SSL_TEST_CERTS}:/certs:ro scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test \
+          # the maintenance socket, for test_maintenance_socket.py
+          export SOCKET_DIR=${RUNNER_TEMP}/maint
+          mkdir -m 777 ${SOCKET_DIR}
+          export DOCKER_ID=$(docker run -d -v ${CQL_SSL_TEST_CERTS}:/certs:ro -v ${SOCKET_DIR}:/sock scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test \
+            --maintenance-socket /sock/cql.m \
             --native-transport-port-ssl 9142 \
             --client-encryption-options enabled=true \
             --client-encryption-options certificate=/certs/server.pem \
@@ -156,19 +160,9 @@ jobs:
           echo "CQL_SSL_TEST_PORT=9142" >> $GITHUB_ENV
           echo "CQL_SSL_TEST_CERTS=${CQL_SSL_TEST_CERTS}" >> $GITHUB_ENV
 
-      - name: Start Scylla in maintenance mode
-        run: |
-          # for test_maintenance_socket.py: a node that never joins the ring, reachable only over its
-          # Unix maintenance socket, with auth on (the socket bypasses it)
-          export SOCKET_DIR=${RUNNER_TEMP}/maint
-          mkdir -m 777 ${SOCKET_DIR}
-          docker run -d -v ${SOCKET_DIR}:/sock scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test \
-            --authenticator PasswordAuthenticator --authorizer CassandraAuthorizer \
-            --maintenance-socket /sock/cql.m --maintenance-mode true
-          timeout 120 bash -c "until [ -S ${SOCKET_DIR}/cql.m ]; do sleep 0.1; done"
           # Scylla creates it 0660 as its own uid inside the container
+          timeout 60 bash -c "until [ -S ${SOCKET_DIR}/cql.m ]; do sleep 0.1; done" || { docker logs ${DOCKER_ID}; exit 1; }
           sudo chmod 666 ${SOCKET_DIR}/cql.m
-
           echo "CQL_MAINTENANCE_SOCKET=${SOCKET_DIR}/cql.m" >> $GITHUB_ENV
 
       - name: pytest
