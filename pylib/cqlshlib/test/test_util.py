@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import cassandra.cluster
 
-from cqlshlib.util import control_connection_query_fallback_kwargs
+from cqlshlib.util import control_connection_query_fallback_kwargs, is_destructive_statement
 
 
 class ControlConnectionQueryFallbackTest(unittest.TestCase):
@@ -45,3 +45,18 @@ class ControlConnectionQueryFallbackTest(unittest.TestCase):
             self.assertEqual(
                 control_connection_query_fallback_kwargs(),
                 {'allow_control_connection_query_fallback': ControlConnectionQueryFallback.Fallback})
+
+
+# Keep in sync with safe_mode_destructive_statements in cqlsh-rs src/repl.rs
+class IsDestructiveStatementTest(unittest.TestCase):
+
+    def test_destructive(self):
+        for stmt in ('DROP TABLE t', 'drop keyspace ks', '  DROP\tINDEX i', 'DROP\nTABLE t',
+                     'DROP MATERIALIZED VIEW mv', 'DROP SERVICE_LEVEL sl', 'DROP ROLE IF EXISTS r',
+                     'TRUNCATE t', 'truncate table t', 'Truncate;'):
+            self.assertTrue(is_destructive_statement(stmt), stmt)
+
+    def test_not_destructive(self):
+        for stmt in ('', 'SELECT * FROM t', 'INSERT INTO drop_log (id) VALUES (1)', 'ALTER TABLE t DROP c',
+                     'DROPPED', 'TRUNCATED t', 'CREATE TABLE dropme (id int PRIMARY KEY)'):
+            self.assertFalse(is_destructive_statement(stmt), stmt)

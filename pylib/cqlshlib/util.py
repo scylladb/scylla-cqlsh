@@ -16,6 +16,7 @@
 
 
 import cProfile
+import re
 import codecs
 import pstats
 import os
@@ -123,6 +124,11 @@ def control_connection_query_fallback_kwargs():
     return {
         'allow_control_connection_query_fallback': ControlConnectionQueryFallback.Fallback
     }
+
+
+def is_destructive_statement(statement):
+    """True for statements --safe-mode asks to confirm: any DROP ... or TRUNCATE ..."""
+    return re.match(r'\s*(DROP|TRUNCATE)\b', statement, re.IGNORECASE) is not None
 
 
 def is_file_secure(filename):
