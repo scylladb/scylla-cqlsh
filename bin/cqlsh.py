@@ -159,7 +159,7 @@ from cqlshlib.formatting import (DEFAULT_DATE_FORMAT, DEFAULT_NANOTIME_FORMAT,
                                  format_by_type)
 from cqlshlib.tracing import print_trace, print_trace_session
 from cqlshlib.util import control_connection_query_fallback_kwargs, get_file_encoding_bomsize
-from cqlshlib.util import is_file_secure, trim_if_present
+from cqlshlib.util import is_destructive_statement, is_file_secure, trim_if_present
 
 try:
     from cqlshlib._version import __version__ as version
@@ -257,6 +257,9 @@ parser.add_option("-t", "--tty", action='store_true', dest='tty',
                   help='Force tty mode (command prompt).')
 parser.add_option('--no-agent-hint', action='store_true', dest='no_agent_hint',
                   help='Do not print the AI agent skills hint (also: $CQLSH_NO_AGENT_HINT).')
+parser.add_option('--safe-mode', action='store_true', dest='safe_mode',
+                  help='Ask for confirmation before running DROP or TRUNCATE statements in interactive mode '
+                       '(also: [ui] safe_mode in cqlshrc).')
 parser.add_option('-v', action="version", help='Print the current version of cqlsh.')
 
 # This is a hidden option to suppress the warning when the -p/--password command line option is used.
@@ -509,6 +512,7 @@ class Shell(cmd.Cmd):
                  is_subshell=False,
                  auth_provider=None,
                  no_compression=False,
+                 safe_mode=False,
                  client_routes_config=None,
                  contact_points=None,
                  profiles=None,
@@ -534,6 +538,7 @@ class Shell(cmd.Cmd):
         self.tracing_enabled = tracing_enabled
         self.page_size = self.default_page_size
         self.expand_enabled = expand_enabled
+        self.safe_mode = safe_mode
         # LOGIN builds a new Cluster from these, so they have to be set even for a subshell
         # that borrows its parent's connection and never builds one here
         self.profiles = profiles if profiles is not None else {
@@ -1159,7 +1164,25 @@ class Shell(cmd.Cmd):
         self.perform_statement(statement)
         self.tracing_enabled = tracing_was_enabled
 
+    def confirm_destructive_statement(self, statement):
+        statement = statement.strip().rstrip(';').rstrip()
+        try:
+            answer = input(f"Are you sure you want to execute the following?\n\n{statement}\n\n[N/y] ")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            answer = ''
+        # input() records the answer in readline history; keep history to statements only
+        if readline is not None and answer and \
+                readline.get_history_item(readline.get_current_history_length()) == answer:
+            readline.remove_history_item(readline.get_current_history_length() - 1)
+        return answer.strip().lower() in ('y', 'yes')
+
     def perform_statement(self, statement):
+        # --tty can be forced with piped stdin; a prompt there would eat the next statement as its answer
+        if self.safe_mode and self.tty and sys.stdin.isatty() and is_destructive_statement(statement) \
+                and not self.confirm_destructive_statement(statement):
+            self.printerr("Operation cancelled.")
+            return False
 
         stmt = SimpleStatement(statement, consistency_level=self.consistency_level, serial_consistency_level=self.serial_consistency_level, fetch_size=self.page_size if self.use_paging else None)
         success, future = self.perform_simple_statement(stmt)
@@ -2700,6 +2723,7 @@ def read_options(cmdlineargs, environment):
     optvalues.request_timeout = option_with_default(configs.getint, 'connection', 'request_timeout', DEFAULT_REQUEST_TIMEOUT_SECONDS)
     optvalues.execute = None
     optvalues.insecure_password_without_warning = False
+    optvalues.safe_mode = option_with_default(configs.getboolean, 'ui', 'safe_mode', False)
 
     (options, arguments) = parser.parse_args(cmdlineargs, values=optvalues)
 
@@ -2937,6 +2961,7 @@ def main(options, hostname, port):
                       request_timeout=options.request_timeout,
                       connect_timeout=options.connect_timeout,
                       encoding=options.encoding,
+                      safe_mode=options.safe_mode,
                       auth_provider=authproviderhandling.load_auth_provider(
                           config_file=CONFIG_FILE,
                           cred_file=options.credentials,
