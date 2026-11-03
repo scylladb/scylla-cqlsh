@@ -257,11 +257,28 @@ jobs:
 
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
-      - uses: douglascamata/setup-docker-macos-action@d5ccc6aae0ce23e7700154f5e63cc53e6433ac48 # v1.1.0
+      # not douglascamata/setup-docker-macos-action: its `brew update` + `brew install docker`
+      # builds Go and docker from source on Intel runners, 12-30 minutes of the job
+      - name: Start colima
+        env:
+          LIMA_VERSION: v2.2.1
+          COLIMA_VERSION: v0.10.3
+          DOCKER_VERSION: 29.9.2
+        run: |
+          sudo mkdir -p /usr/local/libexec
+          sudo chown "$(id -u)" /usr/local/libexec
+          curl -fsSL "https://github.com/lima-vm/lima/releases/download/${LIMA_VERSION}/lima-${LIMA_VERSION#v}-Darwin-x86_64.tar.gz" | tar Cxzm /usr/local
+          curl -fsSL -o colima "https://github.com/abiosoft/colima/releases/download/${COLIMA_VERSION}/colima-Darwin-x86_64"
+          install colima /usr/local/bin/colima
+          curl -fsSL "https://download.docker.com/mac/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" | tar xz --strip-components 1 -C /usr/local/bin docker/docker
+          colima start --cpu "$(sysctl -n hw.ncpu)" --memory "$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))" --arch x86_64 --vm-type=vz --mount-type=virtiofs
+          docker version
 
       - name: Start Scylla
         run: |
-          docker run -d --name scylla -p 9042:9042 -p 19042:19042 scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test --smp 2 --memory 2G --overprovisioned 1 --broadcast-rpc-address 127.0.0.1
+          # writes inside colima can take past the 2s server default (COPY FROM batches hit WriteTimeout)
+          docker run -d --name scylla -p 9042:9042 -p 19042:19042 scylladb/scylla:${{ env.SCYLLA_VERSION }} --cluster-name test --smp 2 --memory 2G --overprovisioned 1 --broadcast-rpc-address 127.0.0.1 \
+            --write-request-timeout-in-ms 10000
 
       - name: pytest
         env:
@@ -275,7 +292,7 @@ jobs:
           uv pip install --system -r ./pylib/requirements.txt setuptools_scm
           python ./scripts/wait-for-cql.py 127.0.0.1
           # test_proxy_access needs iptables on the test host
-          pytest ./cqlshlib/test --ignore=./cqlshlib/test/test_proxy_access.py
+          pytest ./cqlshlib/test --ignore=./cqlshlib/test/test_proxy_access.py --durations=25
 
       - name: Scylla logs
         if: failure()
