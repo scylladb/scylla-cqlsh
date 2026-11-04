@@ -20,7 +20,7 @@ import os
 import sys
 import pytest
 
-from cassandra.auth import PlainTextAuthProvider
+from cassandra.auth import PlainTextAuthProvider, TransitionalModePlainTextAuthProvider
 from cqlshlib.authproviderhandling import load_auth_provider
 
 
@@ -191,5 +191,10 @@ class CustomAuthProviderTest(unittest.TestCase):
                  "password": None})
 
     def test_non_auth_provider_class_rejected(self):
-        with pytest.raises(TypeError, match="not a subclass of cassandra.auth.AuthProvider"):
+        with pytest.raises(TypeError, match="is not an auth provider"):
             load_auth_provider(construct_config_path('non_auth_provider_example'))
+
+    def test_transitional_mode_provider_accepted(self):
+        # Driver provider that implements new_authenticator without subclassing AuthProvider.
+        actual = load_auth_provider(construct_config_path('transitional_mode_example'))
+        assert isinstance(actual, TransitionalModePlainTextAuthProvider)

@@ -1,0 +1,5 @@
+; Driver auth provider that doesn't subclass AuthProvider
+
+[auth_provider]
+module = cassandra.auth
+classname = TransitionalModePlainTextAuthProvider
