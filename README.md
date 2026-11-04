@@ -22,6 +22,22 @@ cqlsh ${SCYLLA_HOST}
 docker run -it scylladb/scylla-cqlsh ${SCYLLA_HOST}
 ```
 
+## Safe mode
+
+`cqlsh --safe-mode` (or `safe_mode = true` under `[ui]` in `cqlshrc`) asks before running any
+`DROP ...` or `TRUNCATE ...` statement typed at the interactive prompt. Only `y`/`yes` runs it;
+anything else (including Ctrl-C/Ctrl-D) prints `Operation cancelled.`.
+`-e`, `-f`, piped stdin (even with `--tty`) and `SOURCE` never prompt.
+
+```
+cqlsh> DROP KEYSPACE ks;
+Are you sure you want to execute the following?
+
+DROP KEYSPACE ks
+
+[N/y] n
+Operation cancelled.
+```
 
 
 # Contributing
