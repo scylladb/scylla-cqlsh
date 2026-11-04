@@ -27,7 +27,6 @@ import random
 import re
 import signal
 import struct
-import subprocess
 import sys
 import threading
 import time
@@ -68,7 +67,6 @@ from cqlshlib.formatting import format_value_default, CqlType, DateTimeFormat, E
 from cqlshlib.sslhandling import ssl_settings
 
 PROFILE_ON = False
-STRACE_ON = False
 DEBUG = False  # This may be set to True when initializing the task
 # TODO: review this for MacOS, maybe use in ('Linux', 'Darwin')
 IS_LINUX = platform.system() == 'Linux'
@@ -511,24 +509,11 @@ class CopyTask(object):
     def num_live_processes(self):
         return sum(1 for p in self.processes if p.is_alive())
 
-    @staticmethod
-    def get_pid():
-        return os.getpid() if hasattr(os, 'getpid') else None
-
-    @staticmethod
-    def trace_process(pid):
-        if pid and STRACE_ON:
-            subprocess.Popen(
-                ['strace', '-vvvv', '-c', '-o', 'strace.%d.out' % pid,
-                 '-e', 'trace=all', '-p', str(pid)])
-
     def start_processes(self):
-        for i, process in enumerate(self.processes):
+        for process in self.processes:
             process.start()
-            self.trace_process(process.pid)
         self.inmsg.release_writers()
         self.outmsg.release_readers()
-        self.trace_process(self.get_pid())
 
     def stop_processes(self):
         for process in self.processes:
