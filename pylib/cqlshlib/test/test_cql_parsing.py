@@ -21,7 +21,7 @@ from textwrap import dedent
 from unittest import TestCase
 from operator import itemgetter
 
-from cqlshlib.cql3handling import CqlRuleSet
+from cqlshlib.cql3handling import CqlRuleSet, index_target_column
 
 
 class TestCqlParsing(TestCase):
@@ -836,6 +836,27 @@ class TestCqlParsing(TestCase):
         statements, _ = CqlRuleSet.cql_split_statements("SELECT * FROM t /* starts here\n and ; continues")
         self.assertEqual(('/* starts here\n and ; continues', 'unclosedComment'),
                          tokens_with_types(statements[-1])[-1])
+
+    def test_index_target_column(self):
+        """
+        Every target format ScyllaDB stores for an index maps to the indexed column.
+        """
+        for target, column in [
+            ('v', 'v'),
+            ('"MyCol"', 'MyCol'),
+            ('"a""b"', 'a"b'),
+            ('keys(m)', 'm'),
+            ('values(m)', 'm'),
+            ('entries(m)', 'm'),
+            ('full(m)', 'm'),
+            ('keys("MyMap")', 'MyMap'),
+            ('{"pk":["p"],"ck":["v"]}', 'v'),
+            ('{"pk":["p1","p2"],"ck":["MyCol"]}', 'MyCol'),
+            ('{"tc":"v","fc":["f1","f2"]}', 'v'),
+            ('{"tc":"v","pk":["p1","p2"]}', 'v'),
+            ('{"tc":"v","pk":["p"],"fc":["f"]}', 'v'),
+        ]:
+            self.assertEqual(column, index_target_column(target), target)
 
 
 def parse_cqlsh_statements(text):
