@@ -285,8 +285,8 @@ class TextMatch(TerminalMatcher):
     def __init__(self, text):
         try:
             TerminalMatcher.__init__(self, ast.literal_eval(text))
-        except (SyntaxError, ValueError):
-            print("bad syntax %r" % (text,))
+        except (SyntaxError, ValueError) as e:
+            raise ValueError("bad syntax %r" % (text,)) from e
 
     def match(self, ctxt, completions):
         if ctxt.remainder:
