@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import re
+
 from cassandra.metadata import maybe_escape_name
 from cqlshlib import helptopics
 from cqlshlib.cqlhandling import CqlParsingRuleSet, Hint
@@ -216,6 +219,30 @@ dequote_value = CqlRuleSet.dequote_value
 dequote_name = CqlRuleSet.dequote_name
 escape_value = CqlRuleSet.escape_value
 decode_escape_sequences = CqlRuleSet.decode_escape_sequences
+
+
+def index_target_column(target):
+    """
+    Return the name of the column an index target refers to.
+
+    Simple global indexes store the (maybe quoted) column name. Indexes on
+    collections store keys(c), values(c), entries(c) or full(c). Local
+    indexes store {"pk": [...], "ck": [c]} and vector indexes with filtering
+    columns or a partition key store {"tc": c, ...}.
+    """
+    try:
+        parsed = json.loads(target)
+    except ValueError:
+        parsed = None
+    if isinstance(parsed, dict):
+        if 'tc' in parsed:
+            return parsed['tc']
+        cols = parsed.get('ck') or parsed.get('pk')
+        return cols[0] if cols else target
+    match = re.match(r'^(?:keys|entries|values|full)\((.+)\)$', target)
+    if match:
+        target = match.group(1)
+    return dequote_name(target)
 
 # BEGIN SYNTAX/COMPLETION RULE DEFINITIONS
 
@@ -944,7 +971,7 @@ def select_relation_lhs_completer(ctxt, cass):
         else:
             break
     for idx in layout.indexes.values():
-        filterable.add(idx.index_options["target"])
+        filterable.add(index_target_column(idx.index_options["target"]))
     return list(map(maybe_escape_name, filterable))
 
 
@@ -1413,7 +1440,7 @@ explain_completion('createUserTypeStatement', 'newcol', '<new_field_name>')
 def create_index_col_completer(ctxt, cass):
     """ Return the columns for which an index doesn't exist yet. """
     layout = get_table_meta(ctxt, cass)
-    idx_targets = [idx.index_options["target"] for idx in layout.indexes.values()]
+    idx_targets = [index_target_column(idx.index_options["target"]) for idx in layout.indexes.values()]
     colnames = [cd.name for cd in list(layout.columns.values()) if cd.name not in idx_targets]
     return list(map(maybe_escape_name, colnames))
 
