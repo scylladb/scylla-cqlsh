@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   jira-sync:
-    uses: scylladb/github-automation/.github/workflows/main_pr_events_jira_sync.yml@9b6217ecbd833963ea54f5623cc3c23e1304c54f # main
+    uses: scylladb/github-automation/.github/workflows/main_pr_events_jira_sync.yml@575136ad5a73f08deb5b726dba1ebb492873c026 # main
     with:
       caller_action: ${{ github.event.action }}
     secrets:
