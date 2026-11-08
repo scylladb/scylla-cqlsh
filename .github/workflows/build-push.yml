@@ -2,6 +2,8 @@ name: Build/Test and Upload to PyPi
 
 on:
   pull_request:
+    # labeled: adding test-windows / test-macos to an open PR starts those jobs
+    types: [opened, synchronize, reopened, labeled]
     branches:
      - master
      - 'branch-*'
@@ -14,6 +16,12 @@ on:
 
 permissions:
   contents: read
+
+# PR labels:
+#   test-windows / test-macos  run the Windows / macOS jobs (they always run on push)
+#   disable-integration-test   skip the integration tests
+#   disable-all-tests          skip every test job
+# Adding a label runs only the jobs that label turns on.
 
 env:
   # Test modules that need a live cluster; the unit test job runs everything else.
@@ -40,6 +48,7 @@ env:
 jobs:
   unit_tests:
     name: Unit Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    if: github.event.action != 'labeled' && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -49,14 +58,8 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ['3.12', '3.13', '3.14', '3.15']
-        include:
-          # oldest and newest interpreters we claim to support
-          - {os: windows-latest, python-version: '3.12'}
-          - {os: windows-latest, python-version: '3.15'}
-          - {os: macos-latest, python-version: '3.12'}
-          - {os: macos-latest, python-version: '3.15'}
 
-    steps:
+    steps: &unit_test_steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -76,9 +79,38 @@ jobs:
           uv pip install --system -r ./pylib/requirements.txt setuptools_scm
           pytest ./cqlshlib/test ${{ env.PYTEST_IGNORE_CLUSTER_TESTS }}
 
+  unit_tests_windows:
+    name: Unit Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    if: github.event_name == 'push' || (github.event.action != 'labeled' || github.event.label.name == 'test-windows') && contains(github.event.pull_request.labels.*.name, 'test-windows') && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        # oldest and newest interpreters we claim to support
+        python-version: ['3.12', '3.15']
+    steps: *unit_test_steps
+
+  unit_tests_macos:
+    name: Unit Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    if: github.event_name == 'push' || (github.event.action != 'labeled' || github.event.label.name == 'test-macos') && contains(github.event.pull_request.labels.*.name, 'test-macos') && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+        python-version: ['3.12', '3.15']
+    steps: *unit_test_steps
+
   build_dist:
     name: Build wheel and sdist
-    if: contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
+    if: (github.event.action != 'labeled' || github.event.label.name == 'test-build') && contains(github.event.pull_request.labels.*.name, 'test-build') || github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,6 +132,7 @@ jobs:
 
   build_packages:
     name: Build scylla packages (${{ matrix.arch }})
+    if: github.event.action != 'labeled'
     # native runners, the compiled dependencies are per arch
     runs-on: ${{ matrix.os }}
     strategy:
@@ -127,7 +160,7 @@ jobs:
 
   integration_test_scylla:
     name: Integration Tests (Scylla, Python ${{ matrix.python-version }})
-    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    if: github.event.action != 'labeled' && !contains(github.event.pull_request.labels.*.name, 'disable-integration-test') && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -188,7 +221,7 @@ jobs:
 
   integration_test_cassandra:
     name: Integration Tests (Cassandra)
-    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    if: github.event.action != 'labeled' && !contains(github.event.pull_request.labels.*.name, 'disable-integration-test') && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -214,7 +247,7 @@ jobs:
   # and the tests run on the Windows side, reaching it through WSL's localhost forwarding.
   integration_test_scylla_windows:
     name: Integration Tests (Scylla in WSL2, Windows)
-    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    if: github.event_name == 'push' || (github.event.action != 'labeled' || github.event.label.name == 'test-windows') && contains(github.event.pull_request.labels.*.name, 'test-windows') && !contains(github.event.pull_request.labels.*.name, 'disable-integration-test') && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
@@ -265,7 +298,7 @@ jobs:
   # virtualization, so this has to be an Intel runner.
   integration_test_scylla_macos:
     name: Integration Tests (Scylla in colima, macOS)
-    if: "!contains(github.event.pull_request.labels.*.name, 'disable-integration-test')"
+    if: github.event_name == 'push' || (github.event.action != 'labeled' || github.event.label.name == 'test-macos') && contains(github.event.pull_request.labels.*.name, 'test-macos') && !contains(github.event.pull_request.labels.*.name, 'disable-integration-test') && !contains(github.event.pull_request.labels.*.name, 'disable-all-tests')
     runs-on: macos-26-intel
     # a good run takes ~50 minutes, and slow runners can take far longer (setup alone has taken 33)
     timeout-minutes: 90
@@ -376,7 +409,7 @@ jobs:
             scylladb/scylla-cqlsh:master
 
   upload_pypi:
-    needs: [unit_tests, build_dist, build_packages, integration_test_scylla, integration_test_cassandra]
+    needs: [unit_tests, unit_tests_windows, unit_tests_macos, build_dist, build_packages, integration_test_scylla, integration_test_cassandra]
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && endsWith(github.event.ref, 'scylla')
