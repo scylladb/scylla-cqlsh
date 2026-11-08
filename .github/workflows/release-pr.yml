@@ -1,0 +1,62 @@
+name: Release PR
+
+# Same flow as release-plz in cqlsh-rs and minicloud, kept on our vX.Y.Z-scylla tags:
+#   1. every push to master / branch-* updates a rolling "release: vX.Y.Z-scylla" PR
+#      (next patch version + CHANGELOG.md)
+#   2. a maintainer merges it
+#   3. the next run tags the merge commit, which runs create-release.yml and the
+#      PyPI / Docker publishing in build-push.yml
+# Pushing a tag by hand still works.
+#
+# Token: a GitHub App with Contents and Pull requests read/write on this repo,
+#   CQLSH_RELEASE_BOT_APP_ID (repo variable) + CQLSH_RELEASE_BOT_APP_PRIVATE_KEY (repo secret).
+#   The job is skipped until they are set. Not GITHUB_TOKEN: PRs it opens get no CI,
+#   and tags it pushes don't trigger other workflows.
+
+on:
+  push:
+    branches:
+      - master
+      - 'branch-*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for the release PR
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-pr-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Release PR
+    # a manual run from another branch would release that branch
+    if: vars.CQLSH_RELEASE_BOT_APP_ID != '' && (github.ref_name == 'master' || startsWith(github.ref_name, 'branch-'))
+    runs-on: ubuntu-latest
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.CQLSH_RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.CQLSH_RELEASE_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # the branch head, not the event's commit: a re-run of an old run mustn't push a stale changelog
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0  # tags and history for the version and changelog
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Tag a merged release PR, or update the release PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BUMP: ${{ inputs.bump }}
+        run: ./scripts/release-pr.sh
