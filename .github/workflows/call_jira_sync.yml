@@ -13,7 +13,7 @@ jobs:
   jira-sync:
     # release PRs list earlier commits, whose issue references aren't theirs
     if: "!startsWith(github.head_ref, 'release/')"
-    uses: scylladb/github-automation/.github/workflows/main_pr_events_jira_sync.yml@5f60ad247468c6ca3bbd5244648731b89fddec00 # main
+    uses: scylladb/github-automation/.github/workflows/main_pr_events_jira_sync.yml@2f8e395c1a71852499728f95ae3353ea65b5dd02 # main
     with:
       caller_action: ${{ github.event.action }}
     secrets:
