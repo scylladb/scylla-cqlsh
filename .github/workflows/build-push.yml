@@ -14,6 +14,14 @@ on:
       - master
       - 'branch-*'
 
+# The opened, synchronize and reopened runs of a PR share one group, so a new commit
+# cancels the older run. A labeled run starts only the jobs of its label, and a push run
+# builds a merge or a release. Each of these gets a group of its own, so it never waits
+# and is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.action != 'labeled' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+
 permissions:
   contents: read
 
