@@ -1,4 +1,4 @@
-%{product}-cqlsh (%{version}-%{release}-%{revision}) %{codename}; urgency=medium
+%{product}-cqlsh (1:%{version}-%{release}) %{codename}; urgency=medium
 
   * New release
 

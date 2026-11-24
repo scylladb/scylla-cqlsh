@@ -2,8 +2,9 @@
 
 . /etc/os-release
 print_usage() {
-    echo "build_rpm.sh --reloc-pkg build/scylla-cqlsh-package.tar.gz"
+    echo "build_rpm.sh --reloc-pkg build/scylla-cqlsh-package.tar.gz --scylla-release 2027.1"
     echo "  --reloc-pkg specify relocatable package path"
+    echo "  --scylla-release the scylla release (X.Y) whose scylla-python3 the package was built for"
     echo "  --builddir specify rpmbuild directory"
     exit 1
 }
@@ -15,6 +16,10 @@ while [ $# -gt 0 ]; do
             RELOC_PKG=$2
             shift 2
             ;;
+        "--scylla-release")
+            SCYLLA_PYTHON3_RELEASE=$2
+            shift 2
+            ;;
         "--builddir")
             BUILDDIR="$2"
             shift 2
@@ -24,6 +29,14 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+# The bundled compiled modules only run on the python they were built for, so the package
+# takes the scylla-python3 of that one scylla release, and no other.
+if [[ ! "$SCYLLA_PYTHON3_RELEASE" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+    echo "--scylla-release X.Y is required"
+    print_usage
+fi
+SCYLLA_PYTHON3_NEXT_RELEASE=${BASH_REMATCH[1]}.$((10#${BASH_REMATCH[2]} + 1))
 
 RELOC_PKG=$(readlink -f $RELOC_PKG)
 RPMBUILD=$(readlink -f $BUILDDIR)
@@ -46,6 +59,8 @@ parameters=(
     -D"release $SCYLLA_RELEASE"
     -D"product $PRODUCT"
     -D"reloc_pkg $RELOC_PKG_BASENAME"
+    -D"scylla_release $SCYLLA_PYTHON3_RELEASE"
+    -D"scylla_next_release $SCYLLA_PYTHON3_NEXT_RELEASE"
 )
 
 cp dist/redhat/scylla-cqlsh.spec $RPMBUILD/SPECS
