@@ -1,16 +1,22 @@
 Name:           %{product}-cqlsh
+# cqlsh has its own version numbers (6.x), lower than the scylla versions (2026.x)
+# the package had while it was built in scylladb.git: the epoch keeps upgrades working
+Epoch:          1
 Version:        %{version}
 Release:        %{release}%{?dist}
 Summary:        cqlsh is a Python-based command-line client for running CQL commands on a cassandra cluster.
 Group:          Applications/Databases
 Obsoletes:      %{product}-tools < 5.2
-Provides:       scylla-enterprise-cqlsh = %{version}-%{release}
+Provides:       scylla-enterprise-cqlsh = %{epoch}:%{version}-%{release}
 Obsoletes:      scylla-enterprise-cqlsh < 2025.1.0
 
 License:        Apache
 URL:            http://www.scylladb.com/
 Source0:        %{reloc_pkg}
-Requires:       %{product}-python3 = %{version}-%{release}
+# the bundled compiled modules are built for the python of one scylla release
+# (build_rpm.sh --scylla-release), so only that release's scylla-python3
+Requires:       %{product}-python3 >= %{scylla_release}~
+Requires:       %{product}-python3 < %{scylla_next_release}~
 AutoReqProv:    no
 Conflicts:      cassandra
 

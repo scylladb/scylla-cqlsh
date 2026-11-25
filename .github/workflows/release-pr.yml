@@ -5,7 +5,7 @@ name: Release PR
 #      (next patch version + CHANGELOG.md)
 #   2. a maintainer merges it
 #   3. the next run tags the merge commit, which runs create-release.yml and the
-#      PyPI / Docker publishing in build-push.yml
+#      PyPI / Docker / rpm+deb publishing in build-push.yml
 # Pushing a tag by hand still works.
 #
 # Token: a GitHub App with Contents and Pull requests read/write on this repo,

@@ -50,7 +50,6 @@ now = datetime.datetime.now(tz=datetime.timezone.utc)
 changelog_applied = s.substitute(product=product,
                                  version=version,
                                  release=release,
-                                 revision='1',
                                  codename='stable',
                                  timestamp=now.strftime("%a, %d %b %Y %H:%M:%S %z"))
 

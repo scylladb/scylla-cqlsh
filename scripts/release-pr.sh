@@ -70,7 +70,7 @@ git add CHANGELOG.md
 git -c user.name='scylla-cqlsh release' -c user.email='noreply@scylladb.com' commit -q -m "release: $next"
 git push -q -f origin "$branch"
 
-body="Merging this PR tags \`$next\` on \`$base\`, which publishes it (GitHub release, PyPI, Docker).
+body="Merging this PR tags \`$next\` on \`$base\`, which publishes it (GitHub release, PyPI, Docker, rpm/deb packages).
 
 This PR is regenerated on every push to \`$base\`. The version is the top heading of \`CHANGELOG.md\`; editing the title doesn't change it. To release a minor or major version, run the *Release PR* workflow with that bump.
 
